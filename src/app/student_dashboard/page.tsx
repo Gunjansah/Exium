@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import Image from 'next/image'
 import Calendar from '@/components/dashboard/Calendar'
 import SearchBar from '@/components/dashboard/SearchBar'
 import UpcomingExams from '@/components/dashboard/UpcomingExams'
@@ -21,9 +23,27 @@ import {
 } from 'lucide-react'
 import LogoutButton from '@/components/LogoutButton'
 
+interface UserDetails {
+  firstName: string;
+  lastName: string;
+  email: string;
+  profileImage: string | null;
+}
+
 export default function StudentDashboard() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const [userDetails, setUserDetails] = useState<UserDetails | null>(null)
+
+  useEffect(() => {
+    if (session?.user) {
+      // Fetch user details
+      fetch('/api/user/profile')
+        .then(res => res.json())
+        .then(data => setUserDetails(data))
+        .catch(err => console.error('Error fetching user details:', err))
+    }
+  }, [session])
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -48,13 +68,34 @@ export default function StudentDashboard() {
     return null
   }
 
-  const studentName = session.user.email.split('@')[0] || 'Student'
+  const displayName = userDetails 
+    ? `${userDetails.firstName} ${userDetails.lastName}`.trim() || userDetails.email.split('@')[0]
+    : session.user.email.split('@')[0]
 
   return (
     <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar */}
       <aside className="w-64 bg-blue-600 text-white p-6">
         <div className="mb-8">
+          <div className="flex items-center space-x-3 mb-6">
+            <div className="w-12 h-12 rounded-full overflow-hidden bg-blue-500">
+              {userDetails?.profileImage ? (
+                <Image
+                  src={userDetails.profileImage}
+                  alt="Profile"
+                  width={48}
+                  height={48}
+                  className="object-cover w-full h-full"
+                />
+              ) : (
+                <User className="w-6 h-6 text-white m-auto mt-3" />
+              )}
+            </div>
+            <div>
+              <h2 className="font-medium text-sm">{displayName}</h2>
+              <p className="text-xs text-blue-200">{session.user.email}</p>
+            </div>
+          </div>
           <h1 className="text-2xl font-bold">My Studies</h1>
         </div>
 
@@ -62,36 +103,36 @@ export default function StudentDashboard() {
           <div className="space-y-2">
             <h2 className="text-sm uppercase tracking-wider text-blue-200">General</h2>
             <div className="space-y-1">
-              <a href="#" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
+              <Link href="/student_dashboard" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
                 <BookOpen className="w-5 h-5 mr-3" />
                 Dashboard
-              </a>
-              <a href="#" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
+              </Link>
+              <Link href="#" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
                 <FileText className="w-5 h-5 mr-3" />
                 Documents
-              </a>
-              <a href="#" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
+              </Link>
+              <Link href="#" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
                 <BarChart2 className="w-5 h-5 mr-3" />
                 Analytics
-              </a>
+              </Link>
             </div>
           </div>
 
           <div className="space-y-2">
             <h2 className="text-sm uppercase tracking-wider text-blue-200">Settings</h2>
             <div className="space-y-1">
-              <a href="#" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
+              <Link href="/student_dashboard/settings" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
                 <Settings className="w-5 h-5 mr-3" />
                 General Settings
-              </a>
-              <a href="#" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
+              </Link>
+              <Link href="/student_dashboard/help" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
                 <HelpCircle className="w-5 h-5 mr-3" />
                 Get Help
-              </a>
-              <a href="#" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
+              </Link>
+              <Link href="/student_dashboard/profile" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
                 <User className="w-5 h-5 mr-3" />
                 Profile Settings
-              </a>
+              </Link>
               <LogoutButton />
             </div>
           </div>
@@ -104,7 +145,7 @@ export default function StudentDashboard() {
           {/* Header */}
           <div className="flex justify-between items-center mb-8">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Welcome back, {studentName}</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Welcome back, {displayName}</h1>
               <p className="text-gray-600">Track your progress and upcoming exams</p>
             </div>
             <div className="flex items-center space-x-4">

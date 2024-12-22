@@ -11,6 +11,9 @@ datasource db {
 model User {
   id             String              @id @default(uuid())
   email          String              @unique
+  firstName      String?
+  lastName       String?
+  profileImage   String?
   passwordHash   String
   role           Role                @default(STUDENT)
   createdAt      DateTime            @default(now())
@@ -19,7 +22,7 @@ model User {
   examsCreated   Exam[]              @relation("TeacherExams")
   enrollments    ExamEnrollment[]
   submissions    Submission[]
-  canvasAccounts CanvasIntegration[] // For teachers with Canvas OAuth
+  canvasAccounts CanvasIntegration[]
   ProctoringLog  ProctoringLog[]
 
   @@map("users")
