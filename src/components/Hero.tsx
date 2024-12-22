@@ -27,7 +27,7 @@ export default function Hero() {
               <div className="mt-5 sm:mt-8 sm:flex sm:justify-center lg:justify-start">
                 <div className="rounded-md shadow">
                   <Link
-                    href="#"
+                    href="/signup"
                     className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 md:py-4 md:text-lg md:px-10"
                   >
                     Get started
@@ -73,7 +73,7 @@ export default function Hero() {
             <text x="200" y="180" fill="#4EC9B0" fontSize="14">SecureExam</text>
             <text x="300" y="180" fill="#C586C0" fontSize="14">{'}'}</text>
             <text x="320" y="180" fill="#9CDCFE" fontSize="14">from</text>
-            <text x="370" y="180" fill="#CE9178" fontSize="14">'exium'</text>
+            <text x="370" y="180" fill="#CE9178" fontSize="14">&#39;exium&#39;</text>
             <text x="120" y="220" fill="#569CD6" fontSize="14">const</text>
             <text x="170" y="220" fill="#4FC1FF" fontSize="14">exam</text>
             <text x="220" y="220" fill="#D4D4D4" fontSize="14">=</text>
@@ -81,7 +81,7 @@ export default function Hero() {
             <text x="280" y="220" fill="#4EC9B0" fontSize="14">SecureExam</text>
             <text x="380" y="220" fill="#D4D4D4" fontSize="14">({'{'}</text>
             <text x="140" y="260" fill="#9CDCFE" fontSize="14">title:</text>
-            <text x="200" y="260" fill="#CE9178" fontSize="14">'Advanced Algorithms'</text>
+            <text x="200" y="260" fill="#CE9178" fontSize="14">&#39;Advanced Algorithms&#39;</text>
             <text x="120" y="300" fill="#D4D4D4" fontSize="14">{'}'})</text>
             <text x="120" y="340" fill="#569CD6" fontSize="14">await</text>
             <text x="170" y="340" fill="#4FC1FF" fontSize="14">exam</text>
