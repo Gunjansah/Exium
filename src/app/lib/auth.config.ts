@@ -1,46 +1,89 @@
-import type { NextAuthConfig } from 'next-auth';
+import type { NextAuthOptions } from 'next-auth'
+import CredentialsProvider from 'next-auth/providers/credentials'
+import { z } from 'zod'
+import { PrismaClient } from '@prisma/client'
+import bcrypt from 'bcryptjs'
+import { Role } from '@prisma/client'
 
-export const authConfig = {
+declare module 'next-auth' {
+  interface User {
+    id: string
+    email: string
+    role: Role
+  }
+  
+  interface Session {
+    user: {
+      id: string
+      email: string
+      role: Role
+    }
+  }
+}
+
+const prisma = new PrismaClient()
+
+export const authConfig: NextAuthOptions = {
+  providers: [
+    CredentialsProvider({
+      id: 'credentials',
+      name: 'Credentials',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' }
+      },
+      async authorize(credentials) {
+        try {
+          const { email, password } = z
+            .object({ email: z.string().email(), password: z.string().min(6) })
+            .parse(credentials)
+
+          const user = await prisma.user.findUnique({
+            where: { email: email.toLowerCase() },
+            select: {
+              id: true,
+              email: true,
+              passwordHash: true,
+              role: true
+            }
+          })
+          
+          if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+            return null
+          }
+
+          return {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+          }
+        } catch {
+          return null
+        }
+      },
+    }),
+  ],
   pages: {
     signIn: '/signin',
   },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = user.role;
+        token.role = user.role
+        token.id = user.id
       }
-      return token;
+      return token
     },
     async session({ session, token }) {
       if (token && session.user) {
-        session.user.role = token.role;
+        session.user.id = token.id as string
+        session.user.role = token.role as Role
       }
-      return session;
-    },
-    authorized({ auth, request: { nextUrl } }) {
-      const isLoggedIn = !!auth?.user;
-      const isTeacher = auth?.user?.role === 'TEACHER';
-      const isStudent = auth?.user?.role === 'STUDENT';
-      
-      const isTeacherDashboard = nextUrl.pathname.startsWith('/teacher_dashboard');
-      const isStudentDashboard = nextUrl.pathname.startsWith('/student_dashboard');
-
-      if (isTeacherDashboard && !isTeacher) {
-        return false;
-      }
-
-      if (isStudentDashboard && !isStudent) {
-        return false;
-      }
-
-      if (isLoggedIn && nextUrl.pathname === '/signin') {
-        // Redirect to appropriate dashboard based on role
-        const redirectUrl = isTeacher ? '/teacher_dashboard' : '/student_dashboard';
-        return Response.redirect(new URL(redirectUrl, nextUrl));
-      }
-
-      return true;
+      return session
     },
   },
-  providers: [],
-} satisfies NextAuthConfig;
+  session: {
+    strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
+}

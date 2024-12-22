@@ -3,22 +3,66 @@
 import { useState } from 'react'
 import { AtSymbolIcon, KeyIcon } from '@heroicons/react/24/outline'
 import { authenticate } from '@/app/lib/actions'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useSession, signIn } from 'next-auth/react'
 
 export default function SignIn() {
   const [errorMessage, setErrorMessage] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter()
+  const { data: session, status } = useSession()
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    setIsLoading(true)
+    setErrorMessage('')
+    
     const formData = new FormData(e.currentTarget)
     try {
-      const error = await authenticate(undefined, formData)
-      if (error) {
-        setErrorMessage(error)
+      const result = await signIn('credentials', {
+        email: formData.get('email'),
+        password: formData.get('password'),
+        redirect: false,
+      })
+
+      if (result?.error) {
+        setErrorMessage('Invalid credentials')
+      } else {
+        // Fetch the session to get the user role
+        const response = await fetch('/api/auth/session')
+        const session = await response.json()
+        
+        if (session?.user?.role) {
+          const redirectPath = session.user.role === 'TEACHER' ? '/teacher_dashboard' : '/student_dashboard'
+          router.push(redirectPath)
+          router.refresh()
+        }
       }
-    } catch {
+    } catch (error) {
+      console.error('Sign in error:', error)
       setErrorMessage('Something went wrong!')
+    } finally {
+      setIsLoading(false)
     }
+  }
+
+  // If already authenticated, redirect to appropriate dashboard
+  if (status === 'loading') {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (status === 'authenticated' && session?.user) {
+    const redirectPath = session.user.role === 'TEACHER' ? '/teacher_dashboard' : '/student_dashboard'
+    router.push(redirectPath)
+    return null
   }
 
   return (
@@ -33,7 +77,8 @@ export default function SignIn() {
               name="email"
               placeholder="Email"
               required
-              className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500"
+              disabled={isLoading}
+              className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 disabled:bg-gray-50 disabled:cursor-not-allowed"
             />
             <AtSymbolIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500" />
           </div>
@@ -44,20 +89,22 @@ export default function SignIn() {
               name="password"
               placeholder="Password"
               required
-              className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500"
+              disabled={isLoading}
+              className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 disabled:bg-gray-50 disabled:cursor-not-allowed"
             />
             <KeyIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500" />
           </div>
 
           {errorMessage && (
-            <div className="text-red-500 text-sm">{errorMessage}</div>
+            <div className="text-red-500 text-sm mt-2">{errorMessage}</div>
           )}
 
           <button
             type="submit"
-            className="bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+            disabled={isLoading}
+            className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
           >
-            Sign In
+            {isLoading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 
