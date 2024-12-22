@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+    id String @id @default(uuid())
+    email String @unique
+    passwordHash String
+    role Role @default(STUDENT)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    // Relations
+    examsCreated Exam[] @relation("TeacherExams")
+    enrollments ExamEnrollment[]
+    submissions Submission[]
+    canvasAccounts CanvasIntegration[] // For teachers with Canvas OAuth
+    @@map("users")
+}
+model CanvasIntegration {
+    id String @id @default(uuid())
+    userId String
+    token String // The OAuth token from Canvas
+    createdAt DateTime @default(now())
+    // Relations
+    user User @relation(fields: [userId], references: [id])
+    @@map("canvas_integrations")
+}
+
+model Exam {
+    id String @id @default(uuid())
+    title String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    createdBy String // Teacher's userId
+    // Relations
+    teacher User @relation("TeacherExams", fields: [createdBy], references: [id])
+    questions Question[]
+    enrollments ExamEnrollment[]
+    submissions Submission[]
+    @@map("exams")
+}
+
+model ExamEnrollment {
+    id String @id @default(uuid())
+    examId String
+    userId String
+    enrolledAt DateTime @default(now())
+    // Relations
+    exam Exam @relation(fields: [examId], references: [id])
+    user User @relation(fields: [userId], references: [id])
+    @@map("exam_enrollments")
+}
+
+model Question {
+    id String @id @default(uuid())
+    examId String
+    questionText String
+    type QuestionType
+    // For coding questions, store testCases in JSON
+    // For quiz questions, store multiple choices or correct answer in JSON as well
+    testCases Json?
+    choices Json? // For multiple-choice, short-answer, etc.
+    createdAt DateTime @default(now())
+    // Relations
+    exam Exam @relation(fields: [examId], references: [id])
+    @@map("questions")
+}
+
+model Submission {
+    id String @id @default(uuid())
+    examId String
+    userId String
+    answer String // Could be code or quiz answers (serialized JSON)
+    score Float? // Null until grading is done
+    submittedAt DateTime @default(now())
+    // Relations
+    exam Exam @relation(fields: [examId], references: [id])
+    user User @relation(fields: [userId], references: [id])
+    @@map("submissions")
+}
+
+model ProctoringLog {
+    id String @id @default(uuid())
+    userId String
+    examId String
+    eventType String // e.g., "TAB_SWITCH", "COPY_PASTE"
+    timestamp DateTime @default(now())
+    meta Json? // optional JSON with more details
+    // Relations
+    user User @relation(fields: [userId], references: [id])
+    exam Exam @relation(fields: [examId], references: [id])
+    @@map("proctoring_logs")
+}
+
+enum Role {
+    STUDENT
+    TEACHER
+    ADMIN
+}
+
+enum QuestionType {
+    CODING
+    QUIZ
+    SHORT_ANSWER
+}
+
