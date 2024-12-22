@@ -3,7 +3,7 @@ import { signIn } from 'next-auth/react';
 
 export const authConfig = {
   pages: {
-    signIn: '/teacher_login',
+    signIn: '/signin',
   },
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
