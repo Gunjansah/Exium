@@ -7,6 +7,7 @@ import Editor, { Monaco } from '@monaco-editor/react'
 import { editor as MonacoEditor } from 'monaco-editor'
 import { Shield, Play, Send, Clock, AlertTriangle, X, ChevronLeft, ChevronRight, Eye, Lock, Layout, Settings, RefreshCw, Terminal, Code2, Split, Maximize, Download, HelpCircle, CheckCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import Judge0Tester from '@/components/judge0'
 
 // Types for exam data
 interface ExamQuestion {
@@ -119,6 +120,22 @@ const javaScriptSnippets = {
   },
 }
 
+// First, let's define a mapping of our language IDs to Judge0 language IDs
+const languageIdMap: { [key: string]: number } = {
+  'javascript': 63,  // JavaScript (Node.js 12.14.0)
+  'python': 71,      // Python (3.8.1)
+  'java': 62,        // Java (OpenJDK 13.0.1)
+  'cpp': 54,         // C++ (GCC 9.2.0)
+  'csharp': 51,      // C# (Mono 6.6.0.161)
+  'ruby': 72,        // Ruby (2.7.0)
+  'go': 60,          // Go (1.13.5)
+  'rust': 73,        // Rust (1.40.0)
+  'typescript': 74   // TypeScript (3.7.4)
+};
+
+// Add this line after imports
+const JUDGE0_API_URL = 'http://localhost:2358';
+
 export default function ExamInterface() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -146,6 +163,7 @@ export default function ExamInterface() {
   const [outputHeight, setOutputHeight] = useState(200)
   const [isOutputMaximized, setIsOutputMaximized] = useState(false)
   const [testCaseResults, setTestCaseResults] = useState<Array<{ passed: boolean; input: string; expected: string; output: string; time: string }>>([])
+  const [processing, setProcessing] = useState(false);
 
   // Load exam data
   useEffect(() => {
@@ -342,33 +360,89 @@ export default function ExamInterface() {
     { id: 'rust', name: 'Rust', extension: '.rs' },
   ]
 
+  // Then update the runCode function to use the correct language ID
   const runCode = async () => {
     try {
-      setExecutionResult('Running tests...')
-      // Simulated test execution
-      const results = [
-        {
-          passed: true,
-          input: 'ABCDGH, AEDFHR',
-          expected: 'ADH',
-          output: 'ADH',
-          time: '42ms'
+      setExecutionResult('Running code...');
+      setProcessing(true);
+      
+      const languageId = languageIdMap[selectedLanguage] || 63;
+
+      // Initial submission
+      const response = await fetch('/api/code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        {
-          passed: true,
-          input: 'AGGTAB, GXTXAYB',
-          expected: 'GTAB',
-          output: 'GTAB',
-          time: '38ms'
-        }
-      ]
-      setTestCaseResults(results)
-      setExecutionResult('✅ All test cases passed!')
-    } catch (error) {
-      setExecutionResult('❌ Error executing code')
-      setTestCaseResults([])
+        body: JSON.stringify({
+          source_code: code,
+          language_id: languageId,
+          stdin: ''
+        }),
+      });
+
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      // Start polling with the token
+      await checkStatus(data.token);
+
+    } catch (err) {
+      const error = err as Error;
+      console.error('Error executing code:', error);
+      setExecutionResult(`❌ Error: ${error.message}`);
+      setTestCaseResults([]);
+      setProcessing(false);
     }
-  }
+  };
+
+  const checkStatus = async (token: string) => {
+    try {
+      const response = await fetch(`${JUDGE0_API_URL}/submissions/${token}`);
+      const data = await response.json();
+      const statusId = data.status?.id;
+
+      // If still processing, poll again
+      if (statusId === 1 || statusId === 2) {
+        setTimeout(() => {
+          checkStatus(token);
+        }, 2000);
+        return;
+      }
+
+      // Process the results
+      let output = '';
+      if (data.stdout) {
+        output = atob(data.stdout);
+      } else if (data.stderr) {
+        output = atob(data.stderr);
+      } else if (data.compile_output) {
+        output = atob(data.compile_output);
+      }
+
+      // Just show the output without test case comparison
+      const results = [{
+        passed: true, // Not relevant for simple code execution
+        input: 'N/A',
+        expected: 'N/A',
+        output: output || 'No output',
+        time: `${data.time || 0} seconds (${data.memory || 0} KB)`
+      }];
+      
+      setTestCaseResults(results);
+      setExecutionResult(data.status.description);
+      setProcessing(false);
+
+    } catch (err) {
+      const error = err as Error;
+      console.error('Error checking status:', error);
+      setExecutionResult('❌ Error checking status');
+      setTestCaseResults([]);
+      setProcessing(false);
+    }
+  };
 
   const handleSubmit = async () => {
     setIsSubmitting(true)
@@ -764,10 +838,6 @@ export default function ExamInterface() {
       showIssues: true,
       showUsers: true,
     },
-    // Better intellisense
-    semanticHighlighting: {
-      enabled: true
-    },
     codeLens: true,
     lightbulb: {
       enabled: true as any
@@ -981,142 +1051,22 @@ export default function ExamInterface() {
         {/* Editor/Answer Panel */}
         {examData.questions[currentQuestion].type === 'CODING' && (
           <div className="w-[60%] h-full flex flex-col bg-[#1E1E1E]">
-            {/* Language and Editor Controls */}
-            <div className="bg-[#2D2D2D] text-white p-2 flex items-center justify-between border-b border-gray-700">
-              <div className="flex items-center space-x-4">
-                <select
-                  value={selectedLanguage}
-                  onChange={(e) => setSelectedLanguage(e.target.value)}
-                  className="bg-[#3D3D3D] text-white px-3 py-1.5 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-600"
-                >
-                  {supportedLanguages.map(lang => (
-                    <option key={lang.id} value={lang.id}>
-                      {lang.name}
-                    </option>
-                  ))}
-                </select>
-                <div className="h-5 border-l border-gray-600"></div>
-                <button
-                  onClick={() => setEditorTheme(editorTheme === 'vs-dark' ? 'light' : 'vs-dark')}
-                  className="p-1.5 hover:bg-[#3D3D3D] rounded transition-colors"
-                  title="Toggle theme"
-                >
-                  <Settings className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setFontSize(fontSize === 14 ? 16 : 14)}
-                  className="p-1.5 hover:bg-[#3D3D3D] rounded transition-colors"
-                  title="Toggle font size"
-                >
-                  <Layout className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => setShowOutput(!showOutput)}
-                  className="p-1.5 hover:bg-[#3D3D3D] rounded transition-colors"
-                  title="Toggle output"
-                >
-                  <Terminal className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => {
-                    const blob = new Blob([code], { type: 'text/plain' })
-                    const url = URL.createObjectURL(blob)
-                    const a = document.createElement('a')
-                    a.href = url
-                    a.download = `solution${supportedLanguages.find(l => l.id === selectedLanguage)?.extension || '.txt'}`
-                    a.click()
-                  }}
-                  className="p-1.5 hover:bg-[#3D3D3D] rounded transition-colors"
-                  title="Download code"
-                >
-                  <Download className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
             {/* Editor */}
             <div className="flex-1 relative">
-              <Editor
-                height="100%"
-                defaultLanguage="javascript"
-                language={selectedLanguage}
-                theme={editorTheme === 'vs-dark' ? 'custom-dark' : 'custom-light'}
-                value={code}
-                onChange={handleCodeChange}
-                options={editorOptions}
-                className="monaco-editor"
-                beforeMount={handleEditorWillMount}
-                onMount={handleEditorDidMount}
-              />
+              <Judge0Tester />
             </div>
 
-            {/* Output Panel */}
-            {showOutput && (
-              <div 
-                className={`bg-[#1E1E1E] text-white ${isOutputMaximized ? 'fixed inset-0 z-50' : ''}`}
-                style={{ height: isOutputMaximized ? '100vh' : `${outputHeight}px` }}
-              >
-                <div className="flex items-center justify-between p-2 bg-[#2D2D2D] border-t border-gray-700">
-                  <div className="flex items-center space-x-4">
-                    <span className="text-sm font-medium">Output</span>
-                    {executionResult && (
-                      <span className={`text-sm ${executionResult.includes('���') ? 'text-green-400' : 'text-red-400'}`}>
-                        {executionResult}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => setIsOutputMaximized(!isOutputMaximized)}
-                      className="p-1.5 hover:bg-[#3D3D3D] rounded transition-colors"
-                    >
-                      {isOutputMaximized ? <Maximize className="w-4 h-4" /> : <Split className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-                <div className="p-4 space-y-4 overflow-auto" style={{ height: 'calc(100% - 40px)' }}>
-                  {testCaseResults.map((result, index) => (
-                    <div key={index} className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <span className={`text-sm ${result.passed ? 'text-green-400' : 'text-red-400'}`}>
-                          Test Case {index + 1}: {result.passed ? '✓' : '✗'}
-                        </span>
-                        <span className="text-gray-400 text-xs">{result.time}</span>
-                      </div>
-                      <div className="bg-[#2D2D2D] p-3 rounded text-sm font-mono">
-                        <div>Input: {result.input}</div>
-                        <div>Expected: {result.expected}</div>
-                        <div>Output: {result.output}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Action buttons */}
+            {/* Submit Button */}
             <div className="p-4 bg-[#2D2D2D] border-t border-gray-700">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center space-x-4">
-                  <button
-                    onClick={runCode}
-                    disabled={isSubmitting}
-                    className="inline-flex items-center px-4 py-2 bg-[#3D3D3D] hover:bg-[#4D4D4D] text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                  >
-                    <Play className="w-4 h-4 mr-2" />
-                    Run Code
-                  </button>
-                  <button
-                    onClick={handleSubmit}
-                    disabled={isSubmitting}
-                    className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
-                  >
-                    <Send className="w-4 h-4 mr-2" />
-                    Submit
-                  </button>
-                </div>
+              <div className="flex justify-center">
+                <button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                  className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  Submit
+                </button>
               </div>
             </div>
           </div>
