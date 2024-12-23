@@ -1,3 +1,5 @@
+// This is your Prisma schema file
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -23,46 +25,109 @@ model User {
   enrollments    ExamEnrollment[]
   submissions    Submission[]
   canvasAccounts CanvasIntegration[]
-  ProctoringLog  ProctoringLog[]
+  proctoringLogs ProctoringLog[]
+  violations     SecurityViolation[]
+  // Class relations
+  teachingClasses Class[]            @relation("TeacherClasses")
+  enrolledClasses ClassEnrollment[]
 
   @@map("users")
 }
 
-model CanvasIntegration {
-  id        String   @id @default(uuid())
-  userId    String
-  token     String // The OAuth token from Canvas
-  createdAt DateTime @default(now())
+model Class {
+  id          String            @id @default(uuid())
+  name        String
+  description String?
+  code        String            @unique // Unique code for students to join
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  teacherId   String
   // Relations
+  teacher     User              @relation("TeacherClasses", fields: [teacherId], references: [id])
+  enrollments ClassEnrollment[]
+  exams       Exam[]
+  
+  @@map("classes")
+}
+
+model ClassEnrollment {
+  id        String   @id @default(uuid())
+  classId   String
+  userId    String
+  role      Role     @default(STUDENT)
+  enrolledAt DateTime @default(now())
+  // Relations
+  class     Class    @relation(fields: [classId], references: [id])
   user      User     @relation(fields: [userId], references: [id])
 
-  @@map("canvas_integrations")
+  @@unique([classId, userId])
+  @@map("class_enrollments")
 }
 
 model Exam {
-  id            String           @id @default(uuid())
-  title         String
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  createdBy     String // Teacher's userId
+  id              String              @id @default(uuid())
+  title           String
+  description     String?
+  duration        Int                 // Duration in minutes
+  startTime       DateTime?           // Optional scheduled start time
+  endTime         DateTime?           // Optional scheduled end time
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  createdBy       String             // Teacher's userId
+  classId         String             // Class this exam belongs to
+  status          ExamStatus         @default(DRAFT)
+  // Security Settings
+  securityLevel   SecurityLevel      @default(STANDARD)
+  maxViolations   Int                @default(3)  // Max violations before auto-lock
+  // Security Features
+  fullScreenMode  Boolean            @default(true)
+  blockMultipleTabs Boolean          @default(true)
+  blockKeyboardShortcuts Boolean     @default(true)
+  blockRightClick Boolean            @default(true)
+  blockClipboard Boolean             @default(true)
+  browserMonitoring Boolean          @default(true)
+  blockSearchEngines Boolean         @default(true)
+  resumeCount     Int                @default(1)  // Number of times exam can be resumed
+  webcamRequired  Boolean            @default(false)
+  deviceTracking  Boolean            @default(true)
+  screenshotBlocking Boolean         @default(true)
+  periodicUserValidation Boolean     @default(true)
   // Relations
-  teacher       User             @relation("TeacherExams", fields: [createdBy], references: [id])
-  questions     Question[]
-  enrollments   ExamEnrollment[]
-  submissions   Submission[]
-  ProctoringLog ProctoringLog[]
+  teacher         User               @relation("TeacherExams", fields: [createdBy], references: [id])
+  class           Class              @relation(fields: [classId], references: [id])
+  questions       Question[]
+  enrollments     ExamEnrollment[]
+  submissions     Submission[]
+  proctoringLogs  ProctoringLog[]
+  securityViolations SecurityViolation[]
 
   @@map("exams")
 }
 
-model ExamEnrollment {
-  id         String   @id @default(uuid())
-  examId     String
-  userId     String
-  enrolledAt DateTime @default(now())
+model SecurityViolation {
+  id          String   @id @default(uuid())
+  examId      String
+  userId      String
+  type        ViolationType
+  timestamp   DateTime @default(now())
+  details     Json?    // Additional violation details
   // Relations
-  exam       Exam     @relation(fields: [examId], references: [id])
-  user       User     @relation(fields: [userId], references: [id])
+  exam        Exam     @relation(fields: [examId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@map("security_violations")
+}
+
+model ExamEnrollment {
+  id           String   @id @default(uuid())
+  examId       String
+  userId       String
+  enrolledAt   DateTime @default(now())
+  violationCount Int    @default(0)
+  isLocked     Boolean  @default(false)
+  // Relations
+  exam         Exam     @relation(fields: [examId], references: [id])
+  user         User     @relation(fields: [userId], references: [id])
 
   @@map("exam_enrollments")
 }
@@ -72,6 +137,8 @@ model Question {
   examId       String
   questionText String
   type         QuestionType
+  points       Int         @default(1)
+  order        Int         @default(0)
   // For coding questions, store testCases in JSON
   // For quiz questions, store multiple choices or correct answer in JSON as well
   testCases    Json?
@@ -111,6 +178,17 @@ model ProctoringLog {
   @@map("proctoring_logs")
 }
 
+model CanvasIntegration {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String // The OAuth token from Canvas
+  createdAt DateTime @default(now())
+  // Relations
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("canvas_integrations")
+}
+
 enum Role {
   STUDENT
   TEACHER
@@ -119,6 +197,34 @@ enum Role {
 
 enum QuestionType {
   CODING
-  QUIZ
+  MULTIPLE_CHOICE
   SHORT_ANSWER
+  ESSAY
+}
+
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum SecurityLevel {
+  MINIMAL     // Basic security features
+  STANDARD    // Recommended security level
+  STRICT      // Maximum security
+}
+
+enum ViolationType {
+  TAB_SWITCH
+  FULL_SCREEN_EXIT
+  KEYBOARD_SHORTCUT
+  RIGHT_CLICK
+  CLIPBOARD_USAGE
+  SEARCH_ENGINE_DETECTED
+  MULTIPLE_DEVICES
+  WEBCAM_VIOLATION
+  SCREEN_SHARING
+  PERIODIC_CHECK_FAILED
 }
