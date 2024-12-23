@@ -50,7 +50,7 @@ export default function Judge0Tester() {
 
   const checkStatus = async (token: string): Promise<void> => {
     try {
-      const response = await fetch(`http://localhost:2358/submissions/${token}`)
+      const response = await fetch(`http://10.0.0.216:2358/submissions/${token}`)
       const result: SubmissionResult = await response.json()
       const statusId = result.status?.id
 
@@ -91,7 +91,7 @@ export default function Judge0Tester() {
 
     try {
       console.log('Submitting code...')
-      const submitResponse = await fetch('http://localhost:2358/submissions', {
+      const submitResponse = await fetch('http://10.0.0.216:2358/submissions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
