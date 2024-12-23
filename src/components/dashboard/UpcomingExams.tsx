@@ -1,6 +1,7 @@
 'use client'
 
 import { Clock, Calendar as CalendarIcon } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 // Sample data - replace with real data from your backend
 const upcomingExams = [
@@ -31,6 +32,12 @@ const upcomingExams = [
 ]
 
 export default function UpcomingExams() {
+  const router = useRouter()
+
+  const handleStartExam = (examId: number) => {
+    router.push(`/student_dashboard/exam?id=${examId}`)
+  }
+
   return (
     <div className="space-y-4">
       {upcomingExams.map(exam => (
@@ -55,7 +62,10 @@ export default function UpcomingExams() {
               </div>
             </div>
           </div>
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          <button 
+            onClick={() => handleStartExam(exam.id)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
             Start Exam
           </button>
         </div>
