@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import Calendar from '@/components/dashboard/Calendar'
+import TodoList from '@/components/dashboard/TodoList'
 import SearchBar from '@/components/dashboard/SearchBar'
 import UpcomingExams from '@/components/dashboard/UpcomingExams'
 import HomeworkProgress from '@/components/dashboard/HomeworkProgress'
@@ -19,7 +19,8 @@ import {
   User,
   BarChart2,
   Bell,
-  LogOut
+  LogOut,
+  Calendar as CalendarIcon
 } from 'lucide-react'
 import LogoutButton from '@/components/LogoutButton'
 
@@ -96,7 +97,7 @@ export default function StudentDashboard() {
               <p className="text-xs text-blue-200">{session.user.email}</p>
             </div>
           </div>
-          <h1 className="text-2xl font-bold">My Studies</h1>
+          <h1 className="text-2xl font-bold">ProjectZ</h1>
         </div>
 
         <nav className="space-y-6">
@@ -110,6 +111,10 @@ export default function StudentDashboard() {
               <Link href="#" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
                 <FileText className="w-5 h-5 mr-3" />
                 Documents
+              </Link>
+              <Link href="/student_dashboard/calendar" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
+                <CalendarIcon className="w-5 h-5 mr-3" />
+                Calendar
               </Link>
               <Link href="#" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
                 <BarChart2 className="w-5 h-5 mr-3" />
@@ -186,9 +191,9 @@ export default function StudentDashboard() {
 
             {/* Right Column */}
             <div className="space-y-8">
-              {/* Calendar Widget */}
+              {/* Todo List Widget */}
               <div className="bg-white rounded-xl shadow-sm p-6">
-                <Calendar />
+                <TodoList />
               </div>
 
               {/* Teacher's Feedback */}

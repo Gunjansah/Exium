@@ -1,0 +1,299 @@
+/* Calendar Container */
+.fc {
+  --fc-border-color: theme('colors.gray.200');
+  --fc-button-bg-color: theme('colors.white');
+  --fc-button-border-color: theme('colors.gray.200');
+  --fc-button-text-color: theme('colors.gray.700');
+  --fc-button-hover-bg-color: theme('colors.gray.50');
+  --fc-button-hover-border-color: theme('colors.gray.300');
+  --fc-button-active-bg-color: theme('colors.gray.100');
+  --fc-button-active-border-color: theme('colors.gray.400');
+  --fc-event-bg-color: theme('colors.blue.500');
+  --fc-event-border-color: theme('colors.blue.600');
+  --fc-event-text-color: theme('colors.white');
+  --fc-event-selected-overlay-color: rgba(0, 0, 0, 0.25);
+  --fc-more-link-bg-color: theme('colors.gray.50');
+  --fc-more-link-text-color: theme('colors.gray.700');
+  --fc-today-bg-color: theme('colors.blue.50');
+  --fc-now-indicator-color: theme('colors.red.500');
+  @apply w-full max-w-full overflow-hidden rounded-xl bg-white;
+}
+
+/* Calendar Header */
+.fc .fc-toolbar {
+  @apply mb-4 px-4 py-3 flex flex-wrap justify-between items-center gap-4 border-b border-gray-100;
+}
+
+.fc .fc-toolbar-title {
+  @apply text-xl font-semibold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent;
+}
+
+/* Calendar Buttons */
+.fc .fc-button {
+  @apply px-4 py-2 rounded-lg transition-all duration-200 shadow-sm hover:shadow 
+         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+         disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium;
+}
+
+.fc .fc-button-primary {
+  @apply bg-white text-gray-700 border border-gray-200 hover:bg-gray-50
+         hover:border-gray-300 active:bg-gray-100;
+}
+
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+  @apply bg-blue-50 border-blue-200 text-blue-700;
+}
+
+/* Calendar Grid */
+.fc .fc-scrollgrid {
+  @apply border-gray-100 rounded-lg overflow-hidden;
+}
+
+.fc .fc-daygrid-day-frame {
+  @apply transition-all duration-200 hover:bg-gray-50/50 min-h-[120px];
+}
+
+.fc .fc-daygrid-day-top {
+  @apply p-2;
+}
+
+.fc .fc-daygrid-day-number {
+  @apply text-sm font-medium text-gray-700 hover:text-blue-600 transition-colors duration-200;
+}
+
+/* Today's Date */
+.fc .fc-day-today {
+  @apply bg-blue-50/30 backdrop-blur-sm;
+}
+
+.fc .fc-day-today .fc-daygrid-day-number {
+  @apply text-blue-600 font-semibold;
+}
+
+/* Events */
+.fc-event {
+  @apply cursor-pointer transition-all duration-200 border-none shadow-sm hover:shadow-md
+         rounded-lg px-2 py-1 mb-1 backdrop-blur-sm;
+}
+
+.fc-event-title {
+  @apply font-medium text-sm truncate;
+}
+
+.fc-event-time {
+  @apply text-xs opacity-75 font-medium;
+}
+
+/* Week Numbers */
+.fc .fc-daygrid-week-number {
+  @apply text-xs font-medium text-gray-400 bg-gray-50/50 rounded-full px-2 py-1 m-2
+         hover:bg-gray-100 hover:text-gray-600 transition-all duration-200;
+}
+
+/* Now Indicator */
+.fc .fc-timegrid-now-indicator-line {
+  @apply border-red-500/50 border-dashed;
+}
+
+.fc .fc-timegrid-now-indicator-arrow {
+  @apply border-red-500;
+}
+
+/* Time Grid */
+.fc .fc-timegrid-slot {
+  @apply transition-colors duration-200 hover:bg-gray-50/30;
+}
+
+.fc .fc-timegrid-slot-label {
+  @apply text-sm text-gray-500 font-medium;
+}
+
+/* More Link */
+.fc .fc-daygrid-more-link {
+  @apply text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors duration-200
+         bg-blue-50/50 hover:bg-blue-100/50 px-2 py-1 rounded-full backdrop-blur-sm;
+}
+
+/* Custom Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fc-event {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+  .fc .fc-toolbar {
+    @apply flex-col gap-4;
+  }
+  
+  .fc .fc-toolbar-title {
+    @apply text-lg text-center w-full;
+  }
+  
+  .fc .fc-button {
+    @apply text-sm px-3;
+  }
+
+  .fc .fc-daygrid-day-number {
+    @apply text-xs;
+  }
+
+  .fc-event-title {
+    @apply text-xs;
+  }
+}
+
+/* Custom Event Colors */
+.fc-event.exam-event {
+  @apply bg-gradient-to-r from-red-500 to-red-400 text-white
+         hover:from-red-600 hover:to-red-500;
+}
+
+.fc-event.deadline-event {
+  @apply bg-gradient-to-r from-yellow-500 to-yellow-400 text-white
+         hover:from-yellow-600 hover:to-yellow-500;
+}
+
+.fc-event.assignment-event {
+  @apply bg-gradient-to-r from-blue-500 to-blue-400 text-white
+         hover:from-blue-600 hover:to-blue-500;
+}
+
+.fc-event.meeting-event {
+  @apply bg-gradient-to-r from-purple-500 to-purple-400 text-white
+         hover:from-purple-600 hover:to-purple-500;
+}
+
+.fc-event.reminder-event {
+  @apply bg-gradient-to-r from-green-500 to-green-400 text-white
+         hover:from-green-600 hover:to-green-500;
+}
+
+/* Hover Effects */
+.fc td {
+  @apply transition-colors duration-200;
+}
+
+.fc td:hover {
+  @apply bg-gray-50/50 backdrop-blur-sm;
+}
+
+/* Loading State */
+.calendar-loading {
+  @apply animate-pulse;
+}
+
+/* Error State */
+.calendar-error {
+  animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* Success Animation */
+@keyframes successPulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.calendar-success {
+  animation: successPulse 0.3s ease-in-out;
+}
+
+/* Shake Animation */
+@keyframes shake {
+  10%, 90% {
+    transform: translate3d(-1px, 0, 0);
+  }
+  20%, 80% {
+    transform: translate3d(2px, 0, 0);
+  }
+  30%, 50%, 70% {
+    transform: translate3d(-2px, 0, 0);
+  }
+  40%, 60% {
+    transform: translate3d(2px, 0, 0);
+  }
+}
+
+/* Additional Styles */
+.fc .fc-col-header {
+  @apply bg-gray-50/50 backdrop-blur-sm;
+}
+
+.fc .fc-col-header-cell {
+  @apply py-3;
+}
+
+.fc .fc-col-header-cell-cushion {
+  @apply text-sm font-semibold text-gray-700;
+}
+
+.fc .fc-day-disabled {
+  @apply bg-gray-50/30;
+}
+
+/* Event Dot Indicators */
+.fc .fc-daygrid-event-dot {
+  @apply hidden;
+}
+
+/* Time Grid Now Indicator */
+.fc .fc-timegrid-now-indicator-container {
+  @apply overflow-visible;
+}
+
+/* Event Popover */
+.fc .fc-popover {
+  @apply border border-gray-200 rounded-lg shadow-lg bg-white/95 backdrop-blur-sm;
+}
+
+.fc .fc-popover-header {
+  @apply bg-gray-50 px-3 py-2 border-b border-gray-100 rounded-t-lg;
+}
+
+.fc .fc-popover-title {
+  @apply text-sm font-medium text-gray-700;
+}
+
+.fc .fc-popover-close {
+  @apply text-gray-400 hover:text-gray-600 transition-colors duration-200;
+}
+
+/* List View */
+.fc .fc-list {
+  @apply border border-gray-100 rounded-lg overflow-hidden;
+}
+
+.fc .fc-list-empty {
+  @apply bg-gray-50/50 backdrop-blur-sm p-8 text-center text-gray-500;
+}
+
+.fc .fc-list-day-cushion {
+  @apply bg-gray-50/50 backdrop-blur-sm;
+}
+
+/* Event Resizing */
+.fc .fc-event-resizer {
+  @apply opacity-0 transition-opacity duration-200;
+}
+
+.fc .fc-event:hover .fc-event-resizer {
+  @apply opacity-100;
+} 
