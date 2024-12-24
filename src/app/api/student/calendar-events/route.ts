@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     const session = await getServerSession(authOptions)
     
     if (!session?.user?.id) {
-      console.log('Unauthorized: No session or user ID')
+      console.log('Unauthorized: No session or user ID', { session })
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
@@ -98,13 +98,16 @@ export async function GET(request: Request) {
     // Create calendar events for exams automatically
     const examEvents = await Promise.all(
       exams.map(async (exam) => {
-        const event = await prisma.calendarEvent.create({
+        if (!exam.startTime) return null;
+        
+        return prisma.calendarEvent.create({
           data: {
             title: exam.title,
             description: `Exam for ${exam.class.name}`,
-            startTime: exam.startTime!,
-            endTime: exam.endTime,
+            startTime: exam.startTime,
+            endTime: exam.endTime || new Date(exam.startTime.getTime() + (exam.duration * 60 * 1000)),
             type: 'EXAM',
+            status: 'UPCOMING',
             userId: session.user.id,
             classId: exam.classId,
             examId: exam.id
@@ -124,14 +127,14 @@ export async function GET(request: Request) {
             }
           }
         })
-        return event
       })
     )
 
-    console.log('Created exam events:', examEvents)
+    // Filter out null values and combine all events
+    const validExamEvents = examEvents.filter((event): event is NonNullable<typeof event> => event !== null)
+    console.log('Created exam events:', validExamEvents)
 
-    // Combine all events
-    const allEvents = [...events, ...examEvents]
+    const allEvents = [...events, ...validExamEvents]
 
     // Format the events for the calendar
     const formattedEvents = allEvents.map(event => ({
@@ -153,12 +156,15 @@ export async function GET(request: Request) {
 
     console.log('Formatted events:', formattedEvents)
 
-    return NextResponse.json(formattedEvents)
+    return new NextResponse(JSON.stringify(formattedEvents), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    })
 
   } catch (error) {
-    console.error('Error in calendar events API:', error)
+    console.error('Error in calendar events API:', error instanceof Error ? error.message : 'Unknown error')
     return new NextResponse(
-      JSON.stringify({ error: 'Internal Server Error' }), 
+      JSON.stringify({ error: 'Failed to fetch events' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     )
   }
@@ -205,6 +211,7 @@ export async function POST(request: Request) {
         startTime: new Date(startTime),
         endTime: endTime ? new Date(endTime) : null,
         type,
+        status: 'UPCOMING',
         userId: session.user.id,
         classId,
         examId
@@ -221,4 +228,4 @@ export async function POST(request: Request) {
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     )
   }
-} 
+}

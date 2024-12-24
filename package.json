@@ -24,6 +24,7 @@
     "@radix-ui/react-slot": "^1.1.1",
     "@types/bcryptjs": "^2.4.6",
     "@vercel/postgres": "^0.10.0",
+    "badge": "^1.0.3",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",

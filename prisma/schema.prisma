@@ -9,28 +9,23 @@ datasource db {
 }
 
 model User {
-  id             String              @id @default(uuid())
-  email          String              @unique
-  firstName      String?
-  lastName       String?
-  profileImage   String?
-  passwordHash   String
-  role           Role                @default(STUDENT)
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  // Relations
-  examsCreated   Exam[]              @relation("TeacherExams")
-  enrollments    ExamEnrollment[]
-  submissions    Submission[]
-  canvasAccounts CanvasIntegration[]
-  ProctoringLog  ProctoringLog[]
-  violations     SecurityViolation[]
-  // Class relations
-  teachingClasses Class[]            @relation("TeacherClasses")
+  id              String              @id @default(uuid())
+  email           String              @unique
+  passwordHash    String
+  role            Role                @default(STUDENT)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  firstName       String?
+  lastName        String?
+  profileImage    String?
+  canvasAccounts  CanvasIntegration[]
   enrolledClasses ClassEnrollment[]
-  feedbacksReceived TeacherFeedback[] @relation()
-  feedbacksGiven    TeacherFeedback[] @relation("TeacherFeedbacks")
-  calendarEvents   CalendarEvent[]
+  teachingClasses Class[]             @relation("TeacherClasses")
+  enrollments     ExamEnrollment[]
+  examsCreated    Exam[]              @relation("TeacherExams")
+  ProctoringLog   ProctoringLog[]
+  violations      SecurityViolation[]
+  submissions     Submission[]
 
   @@map("users")
 }
@@ -39,29 +34,25 @@ model Class {
   id          String            @id @default(uuid())
   name        String
   description String?
-  code        String            @unique // Unique code for students to join
+  code        String            @unique
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
   teacherId   String
-  // Relations
-  teacher     User              @relation("TeacherClasses", fields: [teacherId], references: [id])
   enrollments ClassEnrollment[]
+  teacher     User              @relation("TeacherClasses", fields: [teacherId], references: [id])
   exams       Exam[]
-  feedbacks   TeacherFeedback[]
-  calendarEvents CalendarEvent[]
-  
+
   @@map("classes")
 }
 
 model ClassEnrollment {
-  id        String   @id @default(uuid())
-  classId   String
-  userId    String
-  role      Role     @default(STUDENT)
+  id         String   @id @default(uuid())
+  classId    String
+  userId     String
+  role       Role     @default(STUDENT)
   enrolledAt DateTime @default(now())
-  // Relations
-  class     Class    @relation(fields: [classId], references: [id])
-  user      User     @relation(fields: [userId], references: [id])
+  class      Class    @relation(fields: [classId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
 
   @@unique([classId, userId])
   @@map("class_enrollments")
@@ -70,80 +61,72 @@ model ClassEnrollment {
 model CanvasIntegration {
   id        String   @id @default(uuid())
   userId    String
-  token     String // The OAuth token from Canvas
+  token     String
   createdAt DateTime @default(now())
-  // Relations
   user      User     @relation(fields: [userId], references: [id])
 
   @@map("canvas_integrations")
 }
 
 model Exam {
-  id              String              @id @default(uuid())
-  title           String
-  description     String?
-  duration        Int                 // Duration in minutes
-  startTime       DateTime?           // Optional scheduled start time
-  endTime         DateTime?           // Optional scheduled end time
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  createdBy       String             // Teacher's userId
-  classId         String             // Class this exam belongs to
-  status          ExamStatus         @default(DRAFT)
-  // Security Settings
-  securityLevel   SecurityLevel      @default(STANDARD)
-  maxViolations   Int                @default(3)  // Max violations before auto-lock
-  // Security Features
-  fullScreenMode  Boolean            @default(true)
-  blockMultipleTabs Boolean          @default(true)
-  blockKeyboardShortcuts Boolean     @default(true)
-  blockRightClick Boolean            @default(true)
-  blockClipboard Boolean             @default(true)
-  browserMonitoring Boolean          @default(true)
-  blockSearchEngines Boolean         @default(true)
-  resumeCount     Int                @default(1)  // Number of times exam can be resumed
-  webcamRequired  Boolean            @default(false)
-  deviceTracking  Boolean            @default(true)
-  screenshotBlocking Boolean         @default(true)
-  periodicUserValidation Boolean     @default(true)
-  // Relations
-  teacher         User               @relation("TeacherExams", fields: [createdBy], references: [id])
-  class           Class              @relation(fields: [classId], references: [id])
-  questions       Question[]
-  enrollments     ExamEnrollment[]
-  submissions     Submission[]
-  ProctoringLog   ProctoringLog[]
-  securityViolations SecurityViolation[]
-  feedbacks       TeacherFeedback[]
-  calendarEvents  CalendarEvent[]
+  id                     String              @id @default(uuid())
+  title                  String
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  createdBy              String
+  classId                String
+  description            String?
+  duration               Int
+  endTime                DateTime?
+  startTime              DateTime?
+  status                 ExamStatus          @default(DRAFT)
+  blockClipboard         Boolean             @default(true)
+  blockKeyboardShortcuts Boolean             @default(true)
+  blockMultipleTabs      Boolean             @default(true)
+  blockRightClick        Boolean             @default(true)
+  blockSearchEngines     Boolean             @default(true)
+  browserMonitoring      Boolean             @default(true)
+  deviceTracking         Boolean             @default(true)
+  fullScreenMode         Boolean             @default(true)
+  maxViolations          Int                 @default(3)
+  periodicUserValidation Boolean             @default(true)
+  resumeCount            Int                 @default(1)
+  screenshotBlocking     Boolean             @default(true)
+  securityLevel          SecurityLevel       @default(STANDARD)
+  webcamRequired         Boolean             @default(false)
+  enrollments            ExamEnrollment[]
+  class                  Class               @relation(fields: [classId], references: [id])
+  teacher                User                @relation("TeacherExams", fields: [createdBy], references: [id])
+  ProctoringLog          ProctoringLog[]
+  questions              Question[]
+  securityViolations     SecurityViolation[]
+  submissions            Submission[]
 
   @@map("exams")
 }
 
 model SecurityViolation {
-  id          String   @id @default(uuid())
-  examId      String
-  userId      String
-  type        ViolationType
-  timestamp   DateTime @default(now())
-  details     Json?    // Additional violation details
-  // Relations
-  exam        Exam     @relation(fields: [examId], references: [id])
-  user        User     @relation(fields: [userId], references: [id])
+  id        String        @id @default(uuid())
+  examId    String
+  userId    String
+  type      ViolationType
+  timestamp DateTime      @default(now())
+  details   Json?
+  exam      Exam          @relation(fields: [examId], references: [id])
+  user      User          @relation(fields: [userId], references: [id])
 
   @@map("security_violations")
 }
 
 model ExamEnrollment {
-  id           String   @id @default(uuid())
-  examId       String
-  userId       String
-  enrolledAt   DateTime @default(now())
-  violationCount Int    @default(0)
-  isLocked     Boolean  @default(false)
-  // Relations
-  exam         Exam     @relation(fields: [examId], references: [id])
-  user         User     @relation(fields: [userId], references: [id])
+  id             String   @id @default(uuid())
+  examId         String
+  userId         String
+  enrolledAt     DateTime @default(now())
+  isLocked       Boolean  @default(false)
+  violationCount Int      @default(0)
+  exam           Exam     @relation(fields: [examId], references: [id])
+  user           User     @relation(fields: [userId], references: [id])
 
   @@map("exam_enrollments")
 }
@@ -153,14 +136,11 @@ model Question {
   examId       String
   questionText String
   type         QuestionType
-  points       Int         @default(1)
-  order        Int         @default(0)
-  // For coding questions, store testCases in JSON
-  // For quiz questions, store multiple choices or correct answer in JSON as well
   testCases    Json?
-  choices      Json? // For multiple-choice, short-answer, etc.
+  choices      Json?
   createdAt    DateTime     @default(now())
-  // Relations
+  order        Int          @default(0)
+  points       Int          @default(1)
   exam         Exam         @relation(fields: [examId], references: [id])
 
   @@map("questions")
@@ -170,10 +150,9 @@ model Submission {
   id          String   @id @default(uuid())
   examId      String
   userId      String
-  answer      String // Could be code or quiz answers (serialized JSON)
-  score       Float? // Null until grading is done
+  answer      String
+  score       Float?
   submittedAt DateTime @default(now())
-  // Relations
   exam        Exam     @relation(fields: [examId], references: [id])
   user        User     @relation(fields: [userId], references: [id])
 
@@ -184,53 +163,13 @@ model ProctoringLog {
   id        String   @id @default(uuid())
   userId    String
   examId    String
-  eventType String // e.g., "TAB_SWITCH", "COPY_PASTE"
+  eventType String
   timestamp DateTime @default(now())
-  meta      Json? // optional JSON with more details
-  // Relations
-  user      User     @relation(fields: [userId], references: [id])
+  meta      Json?
   exam      Exam     @relation(fields: [examId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
 
   @@map("proctoring_logs")
-}
-
-model TeacherFeedback {
-  id          String   @id @default(uuid())
-  userId      String   // Student who received the feedback
-  teacherId   String   // Teacher who gave the feedback
-  examId      String?  // Optional: Related exam
-  classId     String   // Related class
-  message     String
-  type        FeedbackType
-  createdAt   DateTime @default(now())
-  // Relations
-  user        User     @relation(fields: [userId], references: [id])
-  teacher     User     @relation("TeacherFeedbacks", fields: [teacherId], references: [id])
-  exam        Exam?    @relation(fields: [examId], references: [id])
-  class       Class    @relation(fields: [classId], references: [id])
-
-  @@map("teacher_feedbacks")
-}
-
-model CalendarEvent {
-  id          String       @id @default(uuid())
-  title       String
-  description String?
-  startTime   DateTime
-  endTime     DateTime?
-  type        EventType
-  status      EventStatus  @default(UPCOMING)
-  userId      String      // Student who owns this event
-  classId     String?     // Optional: Related class
-  examId      String?     // Optional: Related exam
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  // Relations
-  user        User        @relation(fields: [userId], references: [id])
-  class       Class?      @relation(fields: [classId], references: [id])
-  exam        Exam?       @relation(fields: [examId], references: [id])
-
-  @@map("calendar_events")
 }
 
 enum Role {
@@ -244,7 +183,6 @@ enum QuestionType {
   MULTIPLE_CHOICE
   SHORT_ANSWER
   ESSAY
-  QUIZ
 }
 
 enum ExamStatus {
@@ -256,9 +194,9 @@ enum ExamStatus {
 }
 
 enum SecurityLevel {
-  MINIMAL     // Basic security features
-  STANDARD    // Recommended security level
-  STRICT      // Maximum security
+  MINIMAL
+  STANDARD
+  STRICT
 }
 
 enum ViolationType {
@@ -272,28 +210,4 @@ enum ViolationType {
   WEBCAM_VIOLATION
   SCREEN_SHARING
   PERIODIC_CHECK_FAILED
-}
-
-enum FeedbackType {
-  GENERAL
-  EXAM_RELATED
-  PERFORMANCE
-  IMPROVEMENT
-  APPRECIATION
-}
-
-enum EventType {
-  EXAM
-  DEADLINE
-  ASSIGNMENT
-  MEETING
-  REMINDER
-  OTHER
-}
-
-enum EventStatus {
-  UPCOMING
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
 }

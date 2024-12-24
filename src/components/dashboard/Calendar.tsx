@@ -458,6 +458,17 @@ export default function Calendar({ className }: CalendarProps) {
               >
                 Close
               </Button>
+              {selectedEvent?.type === 'EXAM' && selectedEvent.status === 'UPCOMING' && (
+                <Button
+                  variant="default"
+                  onClick={() => {
+                    window.location.href = `/student_dashboard/exam/disclaimer?id=${selectedEvent.id}`
+                  }}
+                  className="gap-2"
+                >
+                  Start Exam
+                </Button>
+              )}
               {selectedEvent && (
                 <Button
                   variant="destructive"

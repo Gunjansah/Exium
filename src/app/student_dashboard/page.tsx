@@ -20,7 +20,8 @@ import {
   BarChart2,
   Bell,
   LogOut,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  PlusCircle
 } from 'lucide-react'
 import LogoutButton from '@/components/LogoutButton'
 
@@ -107,6 +108,10 @@ export default function StudentDashboard() {
               <Link href="/student_dashboard" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
                 <BookOpen className="w-5 h-5 mr-3" />
                 Dashboard
+              </Link>
+              <Link href="/student_dashboard/enroll" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
+                <PlusCircle className="w-5 h-5 mr-3" />
+                Enroll in Class
               </Link>
               <Link href="#" className="flex items-center px-4 py-2 text-sm rounded-lg hover:bg-blue-700">
                 <FileText className="w-5 h-5 mr-3" />
@@ -199,7 +204,7 @@ export default function StudentDashboard() {
               {/* Teacher's Feedback */}
               <div className="bg-white rounded-xl shadow-sm p-6">
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-semibold">Teacher's Feedback</h2>
+                  <h2 className="text-lg font-semibold">Teacher Feedback</h2>
                   <a href="#" className="text-blue-600 text-sm hover:underline">View all</a>
                 </div>
                 <TeachersFeedback />

@@ -126,7 +126,7 @@ const languageIdMap: { [key: string]: number } = {
   'python': 71,      // Python (3.8.1)
   'java': 62,        // Java (OpenJDK 13.0.1)
   'cpp': 54,         // C++ (GCC 9.2.0)
-  'csharp': 51,      // C# (Mono 6.6.0.161)
+  'csharp': 51,      // C# (Mono 6.6.0)
   'ruby': 72,        // Ruby (2.7.0)
   'go': 60,          // Go (1.13.5)
   'rust': 73,        // Rust (1.40.0)
@@ -157,8 +157,6 @@ export default function ExamInterface() {
   const [fontSize, setFontSize] = useState(14)
   const [isRecording, setIsRecording] = useState(false)
   const [mouseOutCount, setMouseOutCount] = useState(0)
-  const [showInstructions, setShowInstructions] = useState(true)
-  const [selectedLanguage, setSelectedLanguage] = useState('javascript')
   const [showOutput, setShowOutput] = useState(true)
   const [outputHeight, setOutputHeight] = useState(200)
   const [isOutputMaximized, setIsOutputMaximized] = useState(false)
@@ -260,7 +258,7 @@ export default function ExamInterface() {
       // Mouse tracking
       const handleMouseLeave = () => {
         setMouseOutCount(prev => {
-          const newCount = prev + 1
+          const newCount = prev + 0
           if (newCount > 3) {
             setSecurityViolations(prev => [...prev, 'Excessive mouse exits detected'])
           }
@@ -897,61 +895,6 @@ export default function ExamInterface() {
 
   return (
     <div className="min-h-screen bg-[#F3F4F6]">
-      {/* Instructions Modal */}
-      <AnimatePresence>
-        {showInstructions && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          >
-            <motion.div
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.95 }}
-              className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4"
-            >
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center">
-                  <HelpCircle className="w-6 h-6 text-blue-600 mr-2" />
-                  <h3 className="text-lg font-medium text-gray-900">Exam Instructions</h3>
-                </div>
-                <button
-                  onClick={() => setShowInstructions(false)}
-                  className="text-gray-400 hover:text-gray-500"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="space-y-4">
-                <div className="flex items-start">
-                  <Lock className="w-5 h-5 text-yellow-500 mr-2 mt-0.5" />
-                  <div>
-                    <h4 className="font-medium text-gray-900">Security Measures</h4>
-                    <p className="text-sm text-gray-600">This exam is monitored. Attempts to exit fullscreen, switch tabs, or copy/paste will be recorded.</p>
-                  </div>
-                </div>
-                <div className="flex items-start">
-                  <Clock className="w-5 h-5 text-red-500 mr-2 mt-0.5" />
-                  <div>
-                    <h4 className="font-medium text-gray-900">Time Management</h4>
-                    <p className="text-sm text-gray-600">You have {examData.duration} to complete all questions. The exam will auto-submit when time expires.</p>
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowInstructions(false)}
-                className="mt-6 w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                <CheckCircle className="w-4 h-4 mr-2" />
-                I Understand
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Header */}
       <div className="bg-white border-b border-gray-200 fixed top-0 left-0 right-0 z-40">
         <div className="max-w-full px-4 sm:px-6 lg:px-8 py-2">

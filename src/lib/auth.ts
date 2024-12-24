@@ -45,31 +45,31 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   callbacks: {
-    jwt: async ({ token, user }) => {
+    async jwt({ token, user }) {
       if (user) {
-        return {
-          ...token,
-          id: user.id,
-          role: user.role
-        }
+        token.id = user.id
+        token.email = user.email
+        token.role = user.role
+        token.name = user.name
       }
       return token
     },
-    session: async ({ session, token }) => {
-      return {
-        ...session,
-        user: {
-          ...session.user,
-          id: token.id,
-          role: token.role
-        }
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id as string
+        session.user.email = token.email as string
+        session.user.role = token.role as string
+        session.user.name = token.name as string | null
       }
+      return session
     }
   },
   pages: {
     signIn: '/signin'
   },
   session: {
-    strategy: 'jwt'
-  }
-} 
+    strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60 // 30 days
+  },
+  secret: process.env.NEXTAUTH_SECRET
+}
