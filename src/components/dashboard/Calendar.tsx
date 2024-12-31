@@ -2,22 +2,37 @@
 
 import { useState, useEffect } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addDays } from 'date-fns'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
-import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Trash2, CheckCircle2 } from 'lucide-react'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 interface Event {
   id: string
   title: string
-  start: Date
-  end: Date
   description?: string
+  startTime: string
+  endTime: string
   type: 'EXAM' | 'DEADLINE' | 'ASSIGNMENT' | 'MEETING' | 'REMINDER' | 'OTHER'
   status: 'UPCOMING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
+  userId: string
+  classId?: string
+  examId?: string
+  class?: {
+    id: string
+    name: string
+    code: string
+  }
+}
+
+interface CalendarEvent extends Event {
+  start: Date
+  end: Date
 }
 
 interface CalendarProps {
@@ -25,12 +40,15 @@ interface CalendarProps {
 }
 
 export default function Calendar({ className }: CalendarProps) {
+  const router = useRouter()
   const [currentDate, setCurrentDate] = useState(new Date())
-  const [events, setEvents] = useState<Event[]>([])
+  const [events, setEvents] = useState<CalendarEvent[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isAddEventOpen, setIsAddEventOpen] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
+  const [showEventDetails, setShowEventDetails] = useState(false)
   const [newEvent, setNewEvent] = useState({
     title: '',
     description: '',
@@ -39,47 +57,62 @@ export default function Calendar({ className }: CalendarProps) {
     type: 'REMINDER' as Event['type'],
     status: 'UPCOMING' as Event['status']
   })
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
-  const [showEventDetails, setShowEventDetails] = useState(false)
 
   // Fetch events for the current month
-  useEffect(() => {
-    const fetchEvents = async () => {
-      setIsLoading(true)
-      setError(null)
-      try {
-        const start = startOfMonth(currentDate)
-        const end = endOfMonth(currentDate)
-        
-        const response = await fetch(
-          `/api/student/calendar-events?start=${start.toISOString()}&end=${end.toISOString()}`
-        )
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch events')
-        }
-        
-        const data = await response.json()
-        setEvents(data.map((event: any) => ({
-          ...event,
-          start: new Date(event.start),
-          end: new Date(event.end)
-        })))
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred')
-        console.error('Error fetching events:', err)
-      } finally {
-        setIsLoading(false)
+  const fetchEvents = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const start = startOfMonth(currentDate)
+      const end = endOfMonth(currentDate)
+      
+      const response = await fetch(
+        `/api/student/calendar-events?start=${start.toISOString()}&end=${end.toISOString()}&include=class`
+      )
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch events')
       }
+      
+      const data: Event[] = await response.json()
+      const validEvents = data
+        .map(event => {
+          try {
+            const startDate = new Date(event.startTime)
+            const endDate = new Date(event.endTime)
+
+            if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+              console.error('Invalid date in event:', event)
+              return null
+            }
+
+            return {
+              ...event,
+              start: startDate,
+              end: endDate
+            }
+          } catch (err) {
+            console.error('Error processing event:', err)
+            return null
+          }
+        })
+        .filter((event): event is CalendarEvent => event !== null)
+
+      setEvents(validEvents)
+    } catch (err) {
+      console.error('Error fetching events:', err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch events')
+    } finally {
+      setIsLoading(false)
     }
+  }
 
+  useEffect(() => {
     fetchEvents()
+    // Set up polling for real-time updates
+    const interval = setInterval(fetchEvents, 30000) // Poll every 30 seconds
+    return () => clearInterval(interval)
   }, [currentDate])
-
-  const days = eachDayOfInterval({
-    start: startOfMonth(currentDate),
-    end: endOfMonth(currentDate)
-  })
 
   const previousMonth = () => {
     setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1))
@@ -112,6 +145,17 @@ export default function Calendar({ className }: CalendarProps) {
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      const startTime = new Date(newEvent.start)
+      const endTime = new Date(newEvent.end)
+
+      if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+        throw new Error('Invalid date format')
+      }
+
+      if (endTime < startTime) {
+        throw new Error('End time must be after start time')
+      }
+
       const response = await fetch('/api/student/calendar-events', {
         method: 'POST',
         headers: {
@@ -120,37 +164,19 @@ export default function Calendar({ className }: CalendarProps) {
         body: JSON.stringify({
           title: newEvent.title,
           description: newEvent.description,
-          startTime: new Date(newEvent.start).toISOString(),
-          endTime: new Date(newEvent.end).toISOString(),
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
           type: newEvent.type,
-          status: newEvent.status
+          status: 'UPCOMING'
         })
       })
 
       if (!response.ok) {
-        const error = await response.text()
-        throw new Error(error || 'Failed to create event')
+        throw new Error('Failed to create event')
       }
 
-      // Refresh events
-      const start = startOfMonth(currentDate)
-      const end = endOfMonth(currentDate)
-      const eventsResponse = await fetch(
-        `/api/student/calendar-events?start=${start.toISOString()}&end=${end.toISOString()}`
-      )
-      
-      if (!eventsResponse.ok) {
-        throw new Error('Failed to refresh events')
-      }
-      
-      const data = await eventsResponse.json()
-      setEvents(data.map((event: any) => ({
-        ...event,
-        start: new Date(event.startTime),
-        end: new Date(event.endTime)
-      })))
-
-      // Reset form and close dialog
+      toast.success('Event created successfully')
+      setIsAddEventOpen(false)
       setNewEvent({
         title: '',
         description: '',
@@ -159,116 +185,132 @@ export default function Calendar({ className }: CalendarProps) {
         type: 'REMINDER',
         status: 'UPCOMING'
       })
-      setIsAddEventOpen(false)
+      await fetchEvents()
+      router.refresh() // Refresh the page to update the todo list
     } catch (err) {
       console.error('Error creating event:', err)
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      toast.error('Failed to create event')
     }
   }
 
   const handleDeleteEvent = async (id: string) => {
     try {
-      const response = await fetch(`/api/student/calendar-events/${id}`, {
-        method: 'DELETE',
+      const response = await fetch(`/api/student/calendar-events?id=${id}`, {
+        method: 'DELETE'
       })
 
       if (!response.ok) {
         throw new Error('Failed to delete event')
       }
 
-      // Refresh events
-      const start = startOfMonth(currentDate)
-      const end = endOfMonth(currentDate)
-      const eventsResponse = await fetch(
-        `/api/student/calendar-events?start=${start.toISOString()}&end=${end.toISOString()}`
-      )
-      
-      if (!eventsResponse.ok) {
-        throw new Error('Failed to refresh events')
-      }
-      
-      const data = await eventsResponse.json()
-      setEvents(data.map((event: any) => ({
-        ...event,
-        start: new Date(event.startTime),
-        end: new Date(event.endTime)
-      })))
-
-      setShowEventDetails(false)
-      setSelectedEvent(null)
+      toast.success('Event deleted successfully')
+      await fetchEvents()
+      router.refresh() // Refresh the page to update the todo list
     } catch (err) {
       console.error('Error deleting event:', err)
-      setError(err instanceof Error ? err.message : 'Failed to delete event')
+      toast.error('Failed to delete event')
     }
   }
 
-  const handleEventClick = (event: Event, e: React.MouseEvent) => {
+  const handleToggleStatus = async (event: CalendarEvent) => {
+    try {
+      const newStatus = event.status === 'COMPLETED' ? 'UPCOMING' : 'COMPLETED'
+      const response = await fetch(`/api/student/calendar-events?id=${event.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status: newStatus
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update event status')
+      }
+
+      toast.success('Event status updated')
+      await fetchEvents()
+      router.refresh() // Refresh the page to update the todo list
+    } catch (err) {
+      console.error('Error updating event status:', err)
+      toast.error('Failed to update event status')
+    }
+  }
+
+  const handleEventClick = (event: CalendarEvent, e: React.MouseEvent) => {
     e.stopPropagation()
     setSelectedEvent(event)
     setShowEventDetails(true)
   }
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center text-red-600">
-          <p>Error loading calendar: {error}</p>
-          <Button onClick={() => window.location.reload()} className="mt-4">
-            Retry
-          </Button>
-        </div>
-      </div>
-    )
+  const days = eachDayOfInterval({
+    start: startOfMonth(currentDate),
+    end: endOfMonth(currentDate)
+  })
+
+  const getEventStyles = (type: Event['type'], status: Event['status']) => {
+    const baseStyles = status === 'COMPLETED'
+      ? 'opacity-50'
+      : ''
+
+    switch (type) {
+      case 'EXAM':
+        return cn('bg-red-100 text-red-800 border-red-200', baseStyles)
+      case 'DEADLINE':
+        return cn('bg-yellow-100 text-yellow-800 border-yellow-200', baseStyles)
+      case 'ASSIGNMENT':
+        return cn('bg-blue-100 text-blue-800 border-blue-200', baseStyles)
+      case 'MEETING':
+        return cn('bg-purple-100 text-purple-800 border-purple-200', baseStyles)
+      case 'REMINDER':
+        return cn('bg-green-100 text-green-800 border-green-200', baseStyles)
+      default:
+        return cn('bg-gray-100 text-gray-800 border-gray-200', baseStyles)
+    }
   }
 
   return (
-    <div className={cn("w-full h-full flex flex-col", className)}>
-      {/* Calendar Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold">
-          {format(currentDate, 'MMMM yyyy')}
-        </h2>
+    <div className={cn('space-y-4', className)}>
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={goToToday}
-            className="text-sm"
-          >
-            Today
-          </Button>
           <Button
             variant="outline"
             size="icon"
             onClick={previousMonth}
-            className="h-8 w-8"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="w-4 h-4" />
           </Button>
           <Button
             variant="outline"
             size="icon"
             onClick={nextMonth}
-            className="h-8 w-8"
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="w-4 h-4" />
           </Button>
           <Button
-            onClick={() => {
-              setSelectedDate(new Date())
-              setIsAddEventOpen(true)
-            }}
+            variant="outline"
+            onClick={goToToday}
             className="ml-2"
           >
-            <Plus className="h-4 w-4 mr-1" />
-            Add Event
+            Today
           </Button>
+          <h2 className="text-lg font-semibold ml-4">
+            {format(currentDate, 'MMMM yyyy')}
+          </h2>
         </div>
+        <Button
+          onClick={() => handleDateClick(new Date())}
+          className="flex items-center gap-1"
+        >
+          <Plus className="w-4 h-4" />
+          Add Event
+        </Button>
       </div>
 
-      {/* Calendar Grid */}
-      <div className="flex-1 grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden">
-        {/* Day Headers */}
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+      <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden">
+        {/* Calendar header */}
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
           <div
             key={day}
             className="bg-gray-50 p-2 text-center text-sm font-medium text-gray-500"
@@ -277,7 +319,7 @@ export default function Calendar({ className }: CalendarProps) {
           </div>
         ))}
 
-        {/* Calendar Days */}
+        {/* Calendar days */}
         {days.map((day, dayIdx) => {
           const dayEvents = events.filter(event => 
             format(event.start, 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd')
@@ -287,38 +329,69 @@ export default function Calendar({ className }: CalendarProps) {
             <div
               key={day.toString()}
               className={cn(
-                "min-h-[100px] bg-white p-2 relative cursor-pointer hover:bg-gray-50 transition-colors duration-200",
-                !isSameMonth(day, currentDate) && "bg-gray-50 text-gray-400",
-                isToday(day) && "bg-blue-50"
+                'min-h-[120px] bg-white p-2',
+                !isSameMonth(day, currentDate) && 'bg-gray-50 text-gray-500',
+                'relative group'
               )}
               onClick={() => handleDateClick(day)}
             >
-              <div className="flex justify-between items-start">
-                <span
-                  className={cn(
-                    "inline-flex h-6 w-6 items-center justify-center rounded-full text-sm",
-                    isToday(day) && "bg-blue-600 text-white"
-                  )}
-                >
-                  {format(day, 'd')}
-                </span>
-                {dayEvents.length > 0 && (
-                  <span className="text-xs font-medium text-blue-600">
-                    {dayEvents.length} events
-                  </span>
+              <time
+                dateTime={format(day, 'yyyy-MM-dd')}
+                className={cn(
+                  'ml-auto flex h-6 w-6 items-center justify-center rounded-full text-sm',
+                  isToday(day) && 'bg-blue-600 text-white',
+                  !isToday(day) && 'text-gray-900'
                 )}
-              </div>
-              
-              {/* Events List */}
-              <div className="mt-1 space-y-1 max-h-[80px] overflow-y-auto">
-                {dayEvents.map((event, eventIdx) => (
+              >
+                {format(day, 'd')}
+              </time>
+
+              <div className="space-y-1 mt-2">
+                {dayEvents.map((event) => (
                   <div
                     key={event.id}
-                    className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 truncate hover:bg-blue-200 transition-colors duration-200 cursor-pointer"
-                    title={`${event.title}\n${format(event.start, 'HH:mm')} - ${format(event.end, 'HH:mm')}`}
                     onClick={(e) => handleEventClick(event, e)}
+                    className={cn(
+                      'px-2 py-1 text-xs rounded-md border cursor-pointer transition-all duration-200',
+                      getEventStyles(event.type, event.status)
+                    )}
                   >
-                    {event.title}
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleToggleStatus(event)
+                        }}
+                        className={cn(
+                          'w-3 h-3 rounded-full border transition-colors duration-200',
+                          event.status === 'COMPLETED'
+                            ? 'border-current bg-current'
+                            : 'border-current hover:bg-current/10'
+                        )}
+                      >
+                        {event.status === 'COMPLETED' && (
+                          <CheckCircle2 className="w-2 h-2 text-white" />
+                        )}
+                      </button>
+                      <span className={cn(
+                        'truncate',
+                        event.status === 'COMPLETED' && 'line-through opacity-50'
+                      )}>
+                        {event.title}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between mt-1 text-[10px]">
+                      <span>{format(event.start, 'HH:mm')}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteEvent(event.id)
+                        }}
+                        className="opacity-0 group-hover:opacity-100 hover:text-red-600 transition-all duration-200"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -329,81 +402,76 @@ export default function Calendar({ className }: CalendarProps) {
 
       {/* Add Event Dialog */}
       <Dialog open={isAddEventOpen} onOpenChange={setIsAddEventOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Add New Event</DialogTitle>
-            <DialogDescription>
-              Create a new event for {selectedDate ? format(selectedDate, 'MMMM d, yyyy') : 'your calendar'}
-            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateEvent} className="space-y-4">
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="title">Event Title</Label>
-                <Input 
-                  id="title" 
-                  placeholder="Enter event title"
-                  value={newEvent.title}
-                  onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+            <div className="space-y-2">
+              <Label htmlFor="title">Title</Label>
+              <Input
+                id="title"
+                value={newEvent.title}
+                onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+                placeholder="Enter event title"
+                required
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="description">Description (optional)</Label>
+              <Input
+                id="description"
+                value={newEvent.description}
+                onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
+                placeholder="Enter event description"
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="start">Start Date</Label>
+                <Input
+                  id="start"
+                  type="datetime-local"
+                  value={newEvent.start}
+                  onChange={(e) => setNewEvent({ ...newEvent, start: e.target.value })}
                   required
-                  className="mt-1.5"
                 />
               </div>
-              <div>
-                <Label htmlFor="description">Description</Label>
-                <Input 
-                  id="description" 
-                  placeholder="Enter event description"
-                  value={newEvent.description}
-                  onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
-                  className="mt-1.5"
+              
+              <div className="space-y-2">
+                <Label htmlFor="end">End Date</Label>
+                <Input
+                  id="end"
+                  type="datetime-local"
+                  value={newEvent.end}
+                  onChange={(e) => setNewEvent({ ...newEvent, end: e.target.value })}
+                  required
                 />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="start">Start Time</Label>
-                  <Input 
-                    id="start" 
-                    type="datetime-local"
-                    value={newEvent.start}
-                    onChange={(e) => setNewEvent({ ...newEvent, start: e.target.value })}
-                    required
-                    className="mt-1.5"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="end">End Time</Label>
-                  <Input 
-                    id="end" 
-                    type="datetime-local"
-                    value={newEvent.end}
-                    onChange={(e) => setNewEvent({ ...newEvent, end: e.target.value })}
-                    required
-                    className="mt-1.5"
-                  />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="type">Event Type</Label>
-                <Select
-                  value={newEvent.type}
-                  onValueChange={(value: Event['type']) => setNewEvent({ ...newEvent, type: value })}
-                >
-                  <SelectTrigger className="mt-1.5">
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="REMINDER">Reminder</SelectItem>
-                    <SelectItem value="MEETING">Meeting</SelectItem>
-                    <SelectItem value="ASSIGNMENT">Assignment</SelectItem>
-                    <SelectItem value="DEADLINE">Deadline</SelectItem>
-                    <SelectItem value="EXAM">Exam</SelectItem>
-                    <SelectItem value="OTHER">Other</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
-            <div className="flex justify-end gap-2 mt-6">
+            
+            <div className="space-y-2">
+              <Label htmlFor="type">Type</Label>
+              <Select
+                value={newEvent.type}
+                onValueChange={(value: Event['type']) => setNewEvent({ ...newEvent, type: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="DEADLINE">Deadline</SelectItem>
+                  <SelectItem value="ASSIGNMENT">Assignment</SelectItem>
+                  <SelectItem value="MEETING">Meeting</SelectItem>
+                  <SelectItem value="REMINDER">Reminder</SelectItem>
+                  <SelectItem value="OTHER">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="flex justify-end gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -411,7 +479,7 @@ export default function Calendar({ className }: CalendarProps) {
               >
                 Cancel
               </Button>
-              <Button type="submit">Add Event</Button>
+              <Button type="submit">Create Event</Button>
             </div>
           </form>
         </DialogContent>
@@ -421,66 +489,62 @@ export default function Calendar({ className }: CalendarProps) {
       <Dialog open={showEventDetails} onOpenChange={setShowEventDetails}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{selectedEvent?.title}</DialogTitle>
+            <DialogTitle>Event Details</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            {selectedEvent?.description && (
+          {selectedEvent && (
+            <div className="space-y-4">
               <div>
-                <Label>Description</Label>
-                <p className="text-sm text-gray-600 mt-1">{selectedEvent.description}</p>
+                <h3 className="font-medium">{selectedEvent.title}</h3>
+                {selectedEvent.description && (
+                  <p className="text-sm text-gray-600 mt-1">{selectedEvent.description}</p>
+                )}
               </div>
-            )}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Start Time</Label>
-                <p className="text-sm text-gray-600 mt-1">
-                  {selectedEvent && format(selectedEvent.start, 'MMM d, yyyy HH:mm')}
-                </p>
-              </div>
-              <div>
-                <Label>End Time</Label>
-                <p className="text-sm text-gray-600 mt-1">
-                  {selectedEvent && format(selectedEvent.end, 'MMM d, yyyy HH:mm')}
-                </p>
-              </div>
-            </div>
-            <div>
-              <Label>Type</Label>
-              <p className="text-sm text-gray-600 mt-1 capitalize">
-                {selectedEvent?.type.toLowerCase()}
-              </p>
-            </div>
-            <div className="flex justify-end gap-2 mt-6">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowEventDetails(false)}
-              >
-                Close
-              </Button>
-              {selectedEvent?.type === 'EXAM' && selectedEvent.status === 'UPCOMING' && (
-                <Button
-                  variant="default"
-                  onClick={() => {
-                    window.location.href = `/student_dashboard/exam/disclaimer?id=${selectedEvent.id}`
-                  }}
-                  className="gap-2"
-                >
-                  Start Exam
-                </Button>
+              
+              {selectedEvent.class && (
+                <div className="text-sm">
+                  <span className="font-medium">Class:</span>{' '}
+                  {selectedEvent.class.name} ({selectedEvent.class.code})
+                </div>
               )}
-              {selectedEvent && (
+              
+              <div className="text-sm space-y-1">
+                <div>
+                  <span className="font-medium">Start:</span>{' '}
+                  {format(selectedEvent.start, 'PPP p')}
+                </div>
+                <div>
+                  <span className="font-medium">End:</span>{' '}
+                  {format(selectedEvent.end, 'PPP p')}
+                </div>
+                <div>
+                  <span className="font-medium">Type:</span>{' '}
+                  {selectedEvent.type.charAt(0) + selectedEvent.type.slice(1).toLowerCase()}
+                </div>
+                <div>
+                  <span className="font-medium">Status:</span>{' '}
+                  {selectedEvent.status.charAt(0) + selectedEvent.status.slice(1).toLowerCase()}
+                </div>
+              </div>
+              
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => handleToggleStatus(selectedEvent)}
+                >
+                  Mark as {selectedEvent.status === 'COMPLETED' ? 'Incomplete' : 'Complete'}
+                </Button>
                 <Button
                   variant="destructive"
-                  onClick={() => handleDeleteEvent(selectedEvent.id)}
-                  className="gap-2"
+                  onClick={() => {
+                    handleDeleteEvent(selectedEvent.id)
+                    setShowEventDetails(false)
+                  }}
                 >
-                  <Trash2 className="w-4 h-4" />
                   Delete Event
                 </Button>
-              )}
+              </div>
             </div>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

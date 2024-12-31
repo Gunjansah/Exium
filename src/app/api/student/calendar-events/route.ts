@@ -1,208 +1,67 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { authOptions } from '@/lib/auth'
 
 export async function GET(request: Request) {
   try {
-    console.log('Calendar events GET request received')
     const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.id) {
-      console.log('Unauthorized: No session or user ID', { session })
-      return new NextResponse('Unauthorized', { status: 401 })
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    console.log('User ID:', session.user.id)
-
-    // Get date range from query params
     const { searchParams } = new URL(request.url)
-    const startDate = searchParams.get('start')
-    const endDate = searchParams.get('end')
+    const start = searchParams.get('start')
+    const end = searchParams.get('end')
+    const includeClass = searchParams.get('include') === 'class'
 
-    console.log('Query params:', { startDate, endDate })
-
-    if (!startDate || !endDate) {
-      console.log('Missing start or end date')
-      return new NextResponse(
-        JSON.stringify({ error: 'Start and end dates are required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      )
+    if (!start || !end) {
+      return NextResponse.json({ error: 'Start and end dates are required' }, { status: 400 })
     }
 
-    // Get calendar events
     const events = await prisma.calendarEvent.findMany({
       where: {
         userId: session.user.id,
         startTime: {
-          gte: new Date(startDate),
-          lte: new Date(endDate)
+          gte: new Date(start),
+          lte: new Date(end)
         }
       },
       include: {
-        class: {
-          select: {
-            name: true,
-            code: true
-          }
-        },
-        exam: {
-          select: {
-            title: true,
-            duration: true
-          }
-        }
+        class: includeClass,
+        exam: true
       },
       orderBy: {
         startTime: 'asc'
       }
     })
 
-    console.log('Found calendar events:', events)
-
-    // Get exams that don't have calendar events yet
-    const exams = await prisma.exam.findMany({
-      where: {
-        class: {
-          enrollments: {
-            some: {
-              userId: session.user.id,
-              role: 'STUDENT'
-            }
-          }
-        },
-        startTime: {
-          gte: new Date(startDate),
-          lte: new Date(endDate)
-        },
-        NOT: {
-          calendarEvents: {
-            some: {
-              userId: session.user.id
-            }
-          }
-        }
-      },
-      include: {
-        class: {
-          select: {
-            name: true,
-            code: true
-          }
-        }
-      }
-    })
-
-    console.log('Found exams without events:', exams)
-
-    // Create calendar events for exams automatically
-    const examEvents = await Promise.all(
-      exams.map(async (exam) => {
-        if (!exam.startTime) return null;
-        
-        return prisma.calendarEvent.create({
-          data: {
-            title: exam.title,
-            description: `Exam for ${exam.class.name}`,
-            startTime: exam.startTime,
-            endTime: exam.endTime || new Date(exam.startTime.getTime() + (exam.duration * 60 * 1000)),
-            type: 'EXAM',
-            status: 'UPCOMING',
-            userId: session.user.id,
-            classId: exam.classId,
-            examId: exam.id
-          },
-          include: {
-            class: {
-              select: {
-                name: true,
-                code: true
-              }
-            },
-            exam: {
-              select: {
-                title: true,
-                duration: true
-              }
-            }
-          }
-        })
-      })
-    )
-
-    // Filter out null values and combine all events
-    const validExamEvents = examEvents.filter((event): event is NonNullable<typeof event> => event !== null)
-    console.log('Created exam events:', validExamEvents)
-
-    const allEvents = [...events, ...validExamEvents]
-
-    // Format the events for the calendar
-    const formattedEvents = allEvents.map(event => ({
-      id: event.id,
-      title: event.title,
-      description: event.description,
-      start: event.startTime.toISOString(),
-      end: event.endTime?.toISOString() || undefined,
-      type: event.type,
-      status: event.status,
-      className: getEventClassName(event.type, event.status),
-      extendedProps: {
-        class: event.class?.name,
-        classCode: event.class?.code,
-        examDuration: event.exam?.duration,
-        type: event.type
-      }
-    }))
-
-    console.log('Formatted events:', formattedEvents)
-
-    return new NextResponse(JSON.stringify(formattedEvents), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    })
-
+    return NextResponse.json(events)
   } catch (error) {
-    console.error('Error in calendar events API:', error instanceof Error ? error.message : 'Unknown error')
-    return new NextResponse(
-      JSON.stringify({ error: 'Failed to fetch events' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    console.error('Error fetching calendar events:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch calendar events' },
+      { status: 500 }
     )
   }
 }
 
-function getEventClassName(type: string, status: string): string {
-  const baseClass = 'rounded-md px-2 py-1 text-xs font-medium'
-  
-  switch (type) {
-    case 'EXAM':
-      return `${baseClass} bg-red-100 text-red-800 border border-red-200`
-    case 'DEADLINE':
-      return `${baseClass} bg-yellow-100 text-yellow-800 border border-yellow-200`
-    case 'ASSIGNMENT':
-      return `${baseClass} bg-blue-100 text-blue-800 border border-blue-200`
-    case 'MEETING':
-      return `${baseClass} bg-purple-100 text-purple-800 border border-purple-200`
-    case 'REMINDER':
-      return `${baseClass} bg-green-100 text-green-800 border border-green-200`
-    default:
-      return `${baseClass} bg-gray-100 text-gray-800 border border-gray-200`
-  }
-}
-
-// POST endpoint to create new events
 export async function POST(request: Request) {
   try {
-    console.log('Calendar events POST request received')
     const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.id) {
-      console.log('Unauthorized: No session or user ID')
-      return new NextResponse('Unauthorized', { status: 401 })
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json()
-    console.log('Request body:', body)
-    const { title, description, startTime, endTime, type, classId, examId } = body
+    const data = await request.json()
+    const { title, description, startTime, endTime, type, status, classId, examId } = data
+
+    if (!title || !startTime || !type) {
+      return NextResponse.json(
+        { error: 'Title, start time, and type are required' },
+        { status: 400 }
+      )
+    }
 
     const event = await prisma.calendarEvent.create({
       data: {
@@ -211,21 +70,131 @@ export async function POST(request: Request) {
         startTime: new Date(startTime),
         endTime: endTime ? new Date(endTime) : null,
         type,
-        status: 'UPCOMING',
+        status: status || 'UPCOMING',
         userId: session.user.id,
         classId,
         examId
+      },
+      include: {
+        class: true,
+        exam: true
       }
     })
 
-    console.log('Created event:', event)
-    return NextResponse.json(event)
+    // Publish event to all connected clients for real-time updates
+    // You can implement WebSocket or Server-Sent Events here
 
+    return NextResponse.json(event)
   } catch (error) {
     console.error('Error creating calendar event:', error)
-    return new NextResponse(
-      JSON.stringify({ error: 'Internal Server Error' }), 
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    return NextResponse.json(
+      { error: 'Failed to create calendar event' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json({ error: 'Event ID is required' }, { status: 400 })
+    }
+
+    // Verify the event belongs to the user
+    const event = await prisma.calendarEvent.findUnique({
+      where: { id },
+      select: { userId: true }
+    })
+
+    if (!event) {
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 })
+    }
+
+    if (event.userId !== session.user.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    }
+
+    await prisma.calendarEvent.delete({
+      where: { id }
+    })
+
+    // Publish deletion to all connected clients for real-time updates
+    // You can implement WebSocket or Server-Sent Events here
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting calendar event:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete calendar event' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+    const data = await request.json()
+
+    if (!id) {
+      return NextResponse.json({ error: 'Event ID is required' }, { status: 400 })
+    }
+
+    // Verify the event belongs to the user
+    const event = await prisma.calendarEvent.findUnique({
+      where: { id },
+      select: { userId: true }
+    })
+
+    if (!event) {
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 })
+    }
+
+    if (event.userId !== session.user.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    }
+
+    const updatedEvent = await prisma.calendarEvent.update({
+      where: { id },
+      data: {
+        title: data.title,
+        description: data.description,
+        startTime: data.startTime ? new Date(data.startTime) : undefined,
+        endTime: data.endTime ? new Date(data.endTime) : null,
+        type: data.type,
+        status: data.status,
+        classId: data.classId,
+        examId: data.examId
+      },
+      include: {
+        class: true,
+        exam: true
+      }
+    })
+
+    // Publish update to all connected clients for real-time updates
+    // You can implement WebSocket or Server-Sent Events here
+
+    return NextResponse.json(updatedEvent)
+  } catch (error) {
+    console.error('Error updating calendar event:', error)
+    return NextResponse.json(
+      { error: 'Failed to update calendar event' },
+      { status: 500 }
     )
   }
 }
