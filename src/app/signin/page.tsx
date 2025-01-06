@@ -34,7 +34,7 @@ export default function SignIn() {
         const session = await response.json()
         
         if (session?.user?.role) {
-          const redirectPath = session.user.role === 'TEACHER' ? '/teacher_dashboard' : '/student_dashboard'
+          const redirectPath = session.user.role === 'TEACHER' ? '/teacher/dashboard' : '/student_dashboard'
           router.push(redirectPath)
           router.refresh()
         }
@@ -60,7 +60,7 @@ export default function SignIn() {
   }
 
   if (status === 'authenticated' && session?.user) {
-    const redirectPath = session.user.role === 'TEACHER' ? '/teacher_dashboard' : '/student_dashboard'
+    const redirectPath = session.user.role === 'TEACHER' ? '/teacher/dashboard' : '/student_dashboard'
     router.push(redirectPath)
     return null
   }

@@ -5,17 +5,38 @@ import { useRouter } from 'next/navigation'
 import { AtSymbolIcon, KeyIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline'
 import Link from 'next/link'
 
+interface FormData {
+  email: string
+  password: string
+  confirmPassword: string
+}
+
 export default function Signup() {
   const router = useRouter()
   const [role, setRole] = useState<'STUDENT' | 'TEACHER'>('STUDENT')
   const [errorMessage, setErrorMessage] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    const formData = new FormData(e.currentTarget)
-    
-    if (formData.get('password') !== formData.get('confirmPassword')) {
+    setIsLoading(true)
+    setErrorMessage('')
+
+    const form = e.currentTarget
+    const formData = new FormData(form)
+    const email = formData.get('email')
+    const password = formData.get('password')
+    const confirmPassword = formData.get('confirmPassword')
+
+    if (!email || !password || !confirmPassword) {
+      setErrorMessage('All fields are required')
+      setIsLoading(false)
+      return
+    }
+
+    if (password !== confirmPassword) {
       setErrorMessage('Passwords do not match')
+      setIsLoading(false)
       return
     }
 
@@ -24,20 +45,23 @@ export default function Signup() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: formData.get('email'),
-          password: formData.get('password'),
-          role: role,
+          email: email.toString(),
+          password: password.toString(),
+          role,
         }),
       })
+
+      const data = await response.json()
 
       if (response.ok) {
         router.push('/signin')
       } else {
-        const data = await response.json()
         setErrorMessage(data.error || 'Something went wrong')
       }
     } catch (error) {
       setErrorMessage('Failed to create account')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -86,10 +110,10 @@ export default function Signup() {
             <button
               type="button"
               onClick={() => setRole('STUDENT')}
-              className={`px-4 py-2 rounded-lg ${
+              className={`px-4 py-2 rounded-lg transition-colors ${
                 role === 'STUDENT'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700'
+                  ? 'bg-gray-900 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
               Student
@@ -97,40 +121,39 @@ export default function Signup() {
             <button
               type="button"
               onClick={() => setRole('TEACHER')}
-              className={`px-4 py-2 rounded-lg ${
+              className={`px-4 py-2 rounded-lg transition-colors ${
                 role === 'TEACHER'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700'
+                  ? 'bg-gray-900 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
               Teacher
             </button>
           </div>
 
-          <button
-            type="submit"
-            className="bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 transition-colors"
-          >
-            Sign Up
-          </button>
-
           {errorMessage && (
-            <div className="flex items-center gap-2 text-red-500">
+            <div className="flex items-center gap-2 text-red-600 text-sm">
               <ExclamationCircleIcon className="h-5 w-5" />
-              <p className="text-sm">{errorMessage}</p>
+              <p>{errorMessage}</p>
             </div>
           )}
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="bg-gray-900 text-white rounded-lg px-4 py-2 mt-2 hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoading ? 'Creating Account...' : 'Create Account'}
+          </button>
         </form>
 
-        <div className="mt-6 text-center">
-          <p className="text-gray-600">
-            Already have an account?
-            <Link href="/signin" className="ml-2 text-blue-600 hover:text-blue-700 font-medium">
-              Login
-            </Link>
-          </p>
-        </div>
+        <p className="mt-4 text-center text-sm text-gray-600">
+          Already have an account?{' '}
+          <Link href="/signin" className="text-gray-900 hover:underline">
+            Sign in
+          </Link>
+        </p>
       </div>
     </div>
   )
-} 
+}

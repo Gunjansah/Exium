@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import { Inter } from "next/font/google"
 import ClientProvider from '@/components/ClientProvider'
+import QueryProvider from '@/providers/query-provider'
 
 const inter = Inter({
   subsets: ["latin"],
@@ -34,7 +35,9 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${geist.variable} ${geistMono.variable} antialiased`}
       >
-        <ClientProvider>{children}</ClientProvider>
+        <ClientProvider>
+          <QueryProvider>{children}</QueryProvider>
+        </ClientProvider>
       </body>
     </html>
   )

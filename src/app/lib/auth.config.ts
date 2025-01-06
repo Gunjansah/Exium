@@ -1,9 +1,9 @@
 import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { z } from 'zod'
-import { PrismaClient } from '@prisma/client'
-import bcrypt from 'bcryptjs'
 import { Role } from '@prisma/client'
+import bcrypt from 'bcryptjs'
+import { prisma } from '@/lib/prisma'
 
 declare module 'next-auth' {
   interface User {
@@ -21,8 +21,6 @@ declare module 'next-auth' {
   }
 }
 
-const prisma = new PrismaClient()
-
 export const authConfig: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -38,6 +36,8 @@ export const authConfig: NextAuthOptions = {
             .object({ email: z.string().email(), password: z.string().min(6) })
             .parse(credentials)
 
+          console.log('Auth attempt for email:', email.toLowerCase())
+
           const user = await prisma.user.findUnique({
             where: { email: email.toLowerCase() },
             select: {
@@ -48,16 +48,26 @@ export const authConfig: NextAuthOptions = {
             }
           })
           
-          if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+          if (!user) {
+            console.log('User not found')
+            return null
+          }
+
+          const isValidPassword = await bcrypt.compare(password, user.passwordHash)
+          console.log('Password valid:', isValidPassword)
+
+          if (!isValidPassword) {
+            console.log('Invalid password')
             return null
           }
 
           return {
             id: user.id,
             email: user.email,
-            role: user.role,
+            role: user.role
           }
-        } catch {
+        } catch (error) {
+          console.error('Auth error:', error)
           return null
         }
       },
@@ -69,13 +79,13 @@ export const authConfig: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = user.role
         token.id = user.id
+        token.role = user.role
       }
       return token
     },
     async session({ session, token }) {
-      if (token && session.user) {
+      if (token) {
         session.user.id = token.id as string
         session.user.role = token.role as Role
       }

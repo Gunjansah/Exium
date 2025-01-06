@@ -9,6 +9,6 @@ export default withAuth({
 export const config = {
   matcher: [
     '/student_dashboard/:path*',
-    '/teacher_dashboard/:path*',
+    '/teacher/:path*',
   ],
 } 
