@@ -24,7 +24,7 @@ export default function TeacherDashboard() {
     if (status === 'unauthenticated') {
       router.push('/signin')
     } else if (status === 'authenticated' && session?.user?.role !== 'TEACHER') {
-      router.push('/student_dashboard')
+      router.push('/student/dashboard')
     }
   }, [status, session, router])
 

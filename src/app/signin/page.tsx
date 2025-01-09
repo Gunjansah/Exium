@@ -1,121 +1,135 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AtSymbolIcon, KeyIcon } from '@heroicons/react/24/outline'
-import { authenticate } from '@/app/lib/actions'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useSession, signIn } from 'next-auth/react'
 
-export default function SignIn() {
-  const [errorMessage, setErrorMessage] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+export default function SignInPage() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
   const router = useRouter()
-  const { data: session, status } = useSession()
+  const { data: session } = useSession()
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    if (session?.user) {
+      if (session.user.role === 'TEACHER') {
+        router.push('/teacher/dashboard')
+      } else {
+        router.push('/student/dashboard')
+      }
+    }
+  }, [session, router])
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
-    setErrorMessage('')
-    
-    const formData = new FormData(e.currentTarget)
+    setError('')
+
     try {
       const result = await signIn('credentials', {
-        email: formData.get('email'),
-        password: formData.get('password'),
+        email,
+        password,
         redirect: false,
       })
 
       if (result?.error) {
-        setErrorMessage('Invalid credentials')
+        setError('Invalid email or password')
+        return
+      }
+
+      // Redirect based on user role
+      if (session?.user?.role === 'TEACHER') {
+        router.push('/teacher/dashboard')
       } else {
-        // Fetch the session to get the user role
-        const response = await fetch('/api/auth/session')
-        const session = await response.json()
-        
-        if (session?.user?.role) {
-          const redirectPath = session.user.role === 'TEACHER' ? '/teacher/dashboard' : '/student_dashboard'
-          router.push(redirectPath)
-          router.refresh()
-        }
+        router.push('/student/dashboard')
       }
     } catch (error) {
-      console.error('Sign in error:', error)
-      setErrorMessage('Something went wrong!')
-    } finally {
-      setIsLoading(false)
+      setError('An error occurred during sign in')
     }
   }
 
-  // If already authenticated, redirect to appropriate dashboard
-  if (status === 'loading') {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (status === 'authenticated' && session?.user) {
-    const redirectPath = session.user.role === 'TEACHER' ? '/teacher/dashboard' : '/student_dashboard'
-    router.push(redirectPath)
-    return null
-  }
-
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-8 pb-20 gap-8 sm:p-20">
-      <h1 className="text-3xl font-bold text-gray-800">Welcome Back</h1>
-      
-      <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8">
-        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-          <div className="relative">
-            <input
-              type="email"
-              name="email"
-              placeholder="Email"
-              required
-              disabled={isLoading}
-              className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 disabled:bg-gray-50 disabled:cursor-not-allowed"
-            />
-            <AtSymbolIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500" />
-          </div>
-
-          <div className="relative">
-            <input
-              type="password"
-              name="password"
-              placeholder="Password"
-              required
-              disabled={isLoading}
-              className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500 disabled:bg-gray-50 disabled:cursor-not-allowed"
-            />
-            <KeyIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500" />
-          </div>
-
-          {errorMessage && (
-            <div className="text-red-500 text-sm mt-2">{errorMessage}</div>
-          )}
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
-          >
-            {isLoading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
-
-        <div className="mt-6 text-center">
-          <p className="text-gray-600">
-            Don't have an account?
-            <Link href="/signup" className="ml-2 text-blue-600 hover:text-blue-700 font-medium">
-              Sign Up
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
+      <div className="w-full max-w-md space-y-8">
+        <div>
+          <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-gray-900">
+            Sign in to your account
+          </h2>
+          <p className="mt-2 text-center text-sm text-gray-600">
+            Or{' '}
+            <Link href="/signup" className="font-medium text-blue-600 hover:text-blue-500">
+              create a new account
             </Link>
           </p>
         </div>
+
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          <div className="-space-y-px rounded-md shadow-sm">
+            <div>
+              <label htmlFor="email" className="sr-only">
+                Email address
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <AtSymbolIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                </div>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="block w-full rounded-t-md border-0 py-1.5 pl-10 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6"
+                  placeholder="Email address"
+                />
+              </div>
+            </div>
+            <div>
+              <label htmlFor="password" className="sr-only">
+                Password
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <KeyIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                </div>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="block w-full rounded-b-md border-0 py-1.5 pl-10 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6"
+                  placeholder="Password"
+                />
+              </div>
+            </div>
+          </div>
+
+          {error && (
+            <div className="rounded-md bg-red-50 p-4">
+              <div className="flex">
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">{error}</h3>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <button
+              type="submit"
+              className="group relative flex w-full justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              Sign in
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )
