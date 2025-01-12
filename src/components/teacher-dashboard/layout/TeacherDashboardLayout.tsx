@@ -149,11 +149,11 @@ export default function TeacherDashboardLayout({
     try {
       await signOut({ 
         redirect: true,
-        callbackUrl: '/login'
+        callbackUrl: '/'
       })
     } catch (error) {
       console.error('Error signing out:', error)
-      router.push('/login')
+      router.push('/')
     }
   }
 
