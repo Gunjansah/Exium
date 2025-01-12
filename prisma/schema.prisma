@@ -29,6 +29,7 @@ model User {
   submissions       Submission[]
   feedbacksGiven    TeacherFeedback[]   @relation("TeacherFeedbacks")
   feedbacksReceived TeacherFeedback[]
+  enrollmentRequests EnrollmentRequest[]
 
   @@map("users")
 }
@@ -46,6 +47,7 @@ model Class {
   teacher        User              @relation("TeacherClasses", fields: [teacherId], references: [id])
   exams          Exam[]
   feedbacks      TeacherFeedback[]
+  enrollmentRequests EnrollmentRequest[]
 
   @@map("classes")
 }
@@ -156,6 +158,7 @@ model Question {
   timeLimit       Int?            // Time limit in seconds, null for no limit
   codeTemplate    String?         @db.Text // For coding questions
   testCases       Json?           // For coding questions
+  rubric          String?         @db.Text // For long answer questions
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -223,6 +226,20 @@ model CalendarEvent {
   user        User        @relation(fields: [userId], references: [id])
 
   @@map("calendar_events")
+}
+
+model EnrollmentRequest {
+  id         String           @id @default(uuid())
+  classId    String
+  userId     String
+  status     RequestStatus    @default(PENDING)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  class      Class           @relation(fields: [classId], references: [id])
+  user       User            @relation(fields: [userId], references: [id])
+
+  @@unique([classId, userId])
+  @@map("enrollment_requests")
 }
 
 enum Role {
@@ -302,4 +319,10 @@ enum ExamEnrollmentStatus {
   IN_PROGRESS
   COMPLETED
   SUBMITTED
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }

@@ -1,273 +1,209 @@
 'use client'
 
+import { useParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
-import { useParams, useRouter } from 'next/navigation'
-import { LoadingPageSkeleton } from '@/components/loading'
+import { EnrollmentRequests } from '@/components/teacher-dashboard/classes/EnrollmentRequests'
+import { StudentsList } from '@/components/teacher-dashboard/classes/StudentsList'
 import TeacherDashboardLayout from '@/components/teacher-dashboard/layout/TeacherDashboardLayout'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { FileText, GraduationCap, Plus, Users, ArrowLeft } from 'lucide-react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Separator } from '@/components/ui/separator'
+import { 
+  Users, 
+  GraduationCap, 
+  BookOpen, 
+  ClipboardList, 
+  BarChart3,
+  Settings,
+  PlusCircle,
+  Loader2
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { ExamsList } from '@/components/teacher-dashboard/classes/ExamsList'
 
-interface Teacher {
-  id: string
-  firstName: string
-  lastName: string
-  email: string
-}
-
-interface Student {
-  id: string
-  firstName: string
-  lastName: string
-  email: string
-}
-
-interface Exam {
-  id: string
-  title: string
-  description: string | null
-  status: 'DRAFT' | 'SCHEDULED' | 'ACTIVE' | 'COMPLETED'
-  startTime: string | null
-  endTime: string | null
-}
-
-interface Class {
+interface ClassDetails {
   id: string
   name: string
   description: string | null
-  teacher: Teacher
+  code: string
+  teacher: {
+    firstName: string | null
+    lastName: string | null
+  }
   _count: {
     enrollments: number
     exams: number
   }
-  students: Student[]
-  exams: Exam[]
 }
 
-interface ClassResponse {
-  success: boolean
-  data: Class | null
-  error?: string
-}
+export default function ClassDetailsPage() {
+  const params = useParams()
+  const classId = params.classId as string
 
-export default function ClassPage() {
-  const router = useRouter()
-  const params = useParams<{ classId: string }>()
-
-  const { data: response, isLoading } = useQuery<ClassResponse>({
-    queryKey: ['class', params.classId],
+  const { data: classDetails, isLoading } = useQuery<{ data: ClassDetails }>({
+    queryKey: ['class-details', classId],
     queryFn: async () => {
-      const res = await fetch(`/api/teacher/classes/${params.classId}`)
-      if (!res.ok) {
-        throw new Error('Failed to fetch class')
+      const response = await fetch(`/api/teacher/classes/${classId}`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch class details')
       }
-      return res.json()
+      return response.json()
     },
   })
 
   if (isLoading) {
-    return <LoadingPageSkeleton />
-  }
-
-  if (!response?.success || !response.data) {
     return (
       <TeacherDashboardLayout>
-        <div className="flex flex-col items-center justify-center min-h-[60vh]">
-          <h1 className="text-2xl font-bold mb-2">Class Not Found</h1>
-          <p className="text-muted-foreground mb-6">
-            The class you're looking for doesn't exist or you don't have permission to view it.
-          </p>
-          <Button onClick={() => router.push('/teacher/classes')}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Classes
-          </Button>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin" />
         </div>
       </TeacherDashboardLayout>
     )
   }
 
-  const classData = response.data
-
   return (
     <TeacherDashboardLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
-          <div>
+      <div className="space-y-8">
+        {/* Class Header */}
+        <div>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">{classDetails?.data.name}</h1>
+              <p className="text-muted-foreground">
+                {classDetails?.data.description || 'No description available'}
+              </p>
+            </div>
             <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => router.back()}
-                className="h-8 w-8"
-              >
-                <ArrowLeft className="h-4 w-4" />
+              <Badge variant="outline" className="text-sm">
+                Class Code: {classDetails?.data.code}
+              </Badge>
+              <Button variant="outline" size="icon">
+                <Settings className="h-4 w-4" />
               </Button>
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight">{classData.name}</h1>
-                <p className="text-muted-foreground">{classData.description}</p>
-              </div>
             </div>
           </div>
-          <div className="flex space-x-2">
-            <Button
-              variant="outline"
-              onClick={() => router.push(`/teacher/classes/${params.classId}/students/invite`)}
-            >
-              <Users className="mr-2 h-4 w-4" />
-              Invite Students
-            </Button>
-            <Button onClick={() => router.push(`/teacher/classes/${params.classId}/exams/new`)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create Exam
-            </Button>
-          </div>
-        </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Students</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{classData._count.enrollments}</div>
-              <p className="text-xs text-muted-foreground">Enrolled students</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Exams</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {classData.exams?.filter((exam) => exam.status === 'ACTIVE').length || 0}
-              </div>
-              <p className="text-xs text-muted-foreground">Currently running</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Exams</CardTitle>
-              <GraduationCap className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{classData.exams?.length || 0}</div>
-              <p className="text-xs text-muted-foreground">All time</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Tabs defaultValue="exams" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="exams">Exams</TabsTrigger>
-            <TabsTrigger value="students">Students</TabsTrigger>
-          </TabsList>
-          <TabsContent value="exams" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {classData.exams?.map((exam) => (
-                <Card
-                  key={exam.id}
-                  className="cursor-pointer hover:bg-accent/5"
-                  onClick={() => router.push(`/teacher/exams/${exam.id}`)}
-                >
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <Badge
-                        variant="secondary"
-                        className={
-                          exam.status === 'ACTIVE'
-                            ? 'bg-green-100 text-green-800'
-                            : exam.status === 'SCHEDULED'
-                            ? 'bg-blue-100 text-blue-800'
-                            : exam.status === 'COMPLETED'
-                            ? 'bg-gray-100 text-gray-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                        }
-                      >
-                        {exam.status.charAt(0) + exam.status.slice(1).toLowerCase()}
-                      </Badge>
-                    </div>
-                    <CardTitle className="text-lg">{exam.title}</CardTitle>
-                    <CardDescription>{exam.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {exam.startTime && (
-                      <p className="text-sm text-muted-foreground">
-                        Starts: {new Date(exam.startTime).toLocaleString()}
-                      </p>
-                    )}
-                    {exam.endTime && (
-                      <p className="text-sm text-muted-foreground">
-                        Ends: {new Date(exam.endTime).toLocaleString()}
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-              {(!classData.exams || classData.exams.length === 0) && (
-                <div className="col-span-full text-center py-12">
-                  <h3 className="text-lg font-semibold">No Exams Yet</h3>
-                  <p className="text-muted-foreground mt-2">
-                    Create your first exam to get started
-                  </p>
-                  <Button
-                    className="mt-4"
-                    onClick={() => router.push(`/teacher/classes/${params.classId}/exams/new`)}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Exam
-                  </Button>
-                </div>
-              )}
-            </div>
-          </TabsContent>
-          <TabsContent value="students">
+          {/* Quick Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
             <Card>
-              <CardHeader>
-                <CardTitle>Enrolled Students</CardTitle>
-                <CardDescription>
-                  Manage students enrolled in this class
-                </CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Students</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {classData.students?.map((student) => (
-                    <div
-                      key={student.id}
-                      className="flex items-center justify-between rounded-lg border p-4"
-                    >
-                      <div>
-                        <p className="font-medium">
-                          {student.firstName} {student.lastName}
-                        </p>
-                        <p className="text-sm text-muted-foreground">{student.email}</p>
-                      </div>
-                      <Button variant="ghost" size="sm">
-                        View Details
-                      </Button>
-                    </div>
-                  ))}
-                  {(!classData.students || classData.students.length === 0) && (
-                    <div className="text-center py-12">
-                      <h3 className="text-lg font-semibold">No Students Enrolled</h3>
-                      <p className="text-muted-foreground mt-2">
-                        Invite students to join your class
-                      </p>
-                      <Button
-                        className="mt-4"
-                        onClick={() => router.push(`/teacher/classes/${params.classId}/students/invite`)}
-                      >
-                        <Users className="mr-2 h-4 w-4" />
-                        Invite Students
-                      </Button>
-                    </div>
-                  )}
-                </div>
+                <div className="text-2xl font-bold">{classDetails?.data._count.enrollments}</div>
               </CardContent>
             </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Exams</CardTitle>
+                <GraduationCap className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{classDetails?.data._count.exams}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Assignments</CardTitle>
+                <ClipboardList className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">0</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Average Grade</CardTitle>
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">-</div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Main Content */}
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="students">Students</TabsTrigger>
+            <TabsTrigger value="assignments">Assignments</TabsTrigger>
+            <TabsTrigger value="exams">Exams</TabsTrigger>
+            <TabsTrigger value="grades">Grades</TabsTrigger>
+            <TabsTrigger value="requests">Enrollment Requests</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent Activity</CardTitle>
+                  <CardDescription>Latest updates from your class</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">No recent activity</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Upcoming Events</CardTitle>
+                  <CardDescription>Scheduled exams and assignments</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">No upcoming events</p>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="students" className="space-y-4">
+            <StudentsList classId={classId} />
+          </TabsContent>
+
+          <TabsContent value="assignments" className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-semibold tracking-tight">Assignments</h2>
+              <Button>
+                <PlusCircle className="h-4 w-4 mr-2" />
+                Create Assignment
+              </Button>
+            </div>
+            <Card>
+              <CardContent className="p-6">
+                <p className="text-sm text-muted-foreground">Assignment list will be displayed here</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="exams" className="space-y-4">
+            <ExamsList classId={classId} />
+          </TabsContent>
+
+          <TabsContent value="grades" className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-semibold tracking-tight">Grades</h2>
+              <Button>
+                <PlusCircle className="h-4 w-4 mr-2" />
+                Add Grade
+              </Button>
+            </div>
+            <Card>
+              <CardContent className="p-6">
+                <p className="text-sm text-muted-foreground">Grade book will be displayed here</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="requests" className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-semibold tracking-tight">Enrollment Requests</h2>
+            </div>
+            <EnrollmentRequests classId={classId} />
           </TabsContent>
         </Tabs>
       </div>

@@ -5,16 +5,12 @@ export default withAuth(
   function middleware(req) {
     const token = req.nextauth.token
     const isAuth = !!token
-    const isAuthPage =
-      req.nextUrl.pathname.startsWith('/signin') ||
-      req.nextUrl.pathname.startsWith('/signup')
+    const isAuthPage = req.nextUrl.pathname.startsWith('/login')
 
     if (isAuthPage) {
       if (isAuth) {
-        return NextResponse.redirect(new URL(
-          token.role === 'TEACHER' ? '/teacher/dashboard' : '/student/dashboard',
-          req.url
-        ))
+        // Redirect to dashboard if user is already logged in
+        return NextResponse.redirect(new URL('/teacher/dashboard', req.url))
       }
       return null
     }
@@ -25,37 +21,27 @@ export default withAuth(
         from += req.nextUrl.search
       }
 
-      //  // Prevent loops by ignoring `from` values that are already /signin or /signup
-      // if (from.startsWith('/signin') || from.startsWith('/signup')) {
-      //   from = '/'; // Default to homepage or another safe route
-      // }
-
       return NextResponse.redirect(
-        new URL(`/signin?from=${encodeURIComponent(from)}`, req.url)
+        new URL(`/login?from=${encodeURIComponent(from)}`, req.url)
       )
     }
 
-    // Handle protected routes
-    if (req.nextUrl.pathname.startsWith('/teacher') && token.role !== 'TEACHER') {
-      return NextResponse.redirect(new URL('/student/dashboard', req.url))
-    }
-
-    if (req.nextUrl.pathname.startsWith('/student') && token.role !== 'STUDENT') {
-      return NextResponse.redirect(new URL('/teacher/dashboard', req.url))
+    // Handle role-based access
+    if (token.role !== 'TEACHER' && req.nextUrl.pathname.startsWith('/teacher')) {
+      return NextResponse.redirect(new URL('/', req.url))
     }
   },
   {
     callbacks: {
       authorized: ({ token }) => !!token,
     },
+    pages: {
+      signIn: '/login',
+    },
   }
 )
 
+// Protect all routes under /teacher and /api/teacher
 export const config = {
-  matcher: [
-    '/signin',
-    '/signup',
-    '/teacher/:path*',
-    '/student/:path*',
-  ],
+  matcher: ['/teacher/:path*', '/api/teacher/:path*']
 } 

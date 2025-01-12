@@ -1,99 +1,78 @@
-import type { NextAuthOptions } from 'next-auth'
-import CredentialsProvider from 'next-auth/providers/credentials'
+import { AuthOptions } from 'next-auth'
+import type { JWT } from 'next-auth/jwt'
+import Credentials from 'next-auth/providers/credentials'
 import { z } from 'zod'
-import { Role } from '@prisma/client'
-import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
+import bcrypt from 'bcryptjs'
+import { Role } from '@prisma/client'
 
-declare module 'next-auth' {
-  interface User {
-    id: string
-    email: string
-    role: Role
-  }
-  
-  interface Session {
-    user: {
-      id: string
-      email: string
-      role: Role
-    }
-  }
+interface AuthUser {
+  id: string
+  email: string
+  role: Role
 }
 
-export const authConfig: NextAuthOptions = {
+export const authConfig: AuthOptions = {
+  pages: {
+    signIn: '/login',
+  },
+  callbacks: {
+    authorized({ auth, request: { nextUrl } }: { auth: { user: AuthUser } | null, request: { nextUrl: URL } }) {
+      const isLoggedIn = !!auth?.user
+      const isOnDashboard = nextUrl.pathname.startsWith('/teacher')
+      
+      if (isOnDashboard) {
+        if (isLoggedIn) return true
+        return false // Redirect unauthenticated users to login page
+      } else if (isLoggedIn) {
+        return Response.redirect(new URL('/teacher/dashboard', nextUrl))
+      }
+      return true
+    },
+    async jwt({ token, user }: { token: JWT, user: AuthUser | null }) {
+      if (user) {
+        token.role = user.role
+        token.id = user.id
+      }
+      return token
+    },
+    async session({ session, token }: { session: any, token: JWT }) {
+      if (token && session.user) {
+        session.user.role = token.role
+        session.user.id = token.id
+      }
+      return session
+    },
+  },
   providers: [
-    CredentialsProvider({
-      id: 'credentials',
-      name: 'Credentials',
+    Credentials({
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' }
       },
       async authorize(credentials) {
-        try {
-          const { email, password } = z
-            .object({ email: z.string().email(), password: z.string().min(6) })
-            .parse(credentials)
+        const parsedCredentials = z
+          .object({ email: z.string().email(), password: z.string().min(6) })
+          .safeParse(credentials)
 
-          console.log('Auth attempt for email:', email.toLowerCase())
+        if (!parsedCredentials.success) return null
 
-          const user = await prisma.user.findUnique({
-            where: { email: email.toLowerCase() },
-            select: {
-              id: true,
-              email: true,
-              passwordHash: true,
-              role: true
-            }
-          })
-          
-          if (!user) {
-            console.log('User not found')
-            return null
-          }
+        const { email, password } = parsedCredentials.data
 
-          const isValidPassword = await bcrypt.compare(password, user.passwordHash)
-          console.log('Password valid:', isValidPassword)
+        const user = await prisma.user.findUnique({
+          where: { email },
+        })
+        if (!user) return null
 
-          if (!isValidPassword) {
-            console.log('Invalid password')
-            return null
-          }
+        const passwordsMatch = await bcrypt.compare(password, user.passwordHash)
+        if (!passwordsMatch) return null
 
-          return {
-            id: user.id,
-            email: user.email,
-            role: user.role
-          }
-        } catch (error) {
-          console.error('Auth error:', error)
-          return null
+        return {
+          id: user.id,
+          email: user.email,
+          role: user.role,
         }
       },
     }),
   ],
-  pages: {
-    signIn: '/signin',
-  },
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id
-        token.role = user.role
-      }
-      return token
-    },
-    async session({ session, token }) {
-      if (token) {
-        session.user.id = token.id as string
-        session.user.role = token.role as Role
-      }
-      return session
-    },
-  },
-  session: {
-    strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, // 30 days
-  },
 }

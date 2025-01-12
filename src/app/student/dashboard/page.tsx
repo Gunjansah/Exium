@@ -103,8 +103,7 @@ export default function StudentDashboardPage() {
             </Button>
           </div>
         </div>
-
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 grid-cols-4">
           <Card className="shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">My Classes</CardTitle>
@@ -129,44 +128,7 @@ export default function StudentDashboardPage() {
               </p>
             </CardContent>
           </Card>
-          <Card className="shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Completed Exams</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats?.completedExams || 0}</div>
-              <p className="text-xs text-muted-foreground">
-                Total exams taken
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Upcoming Events</CardTitle>
-              <CalendarDays className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats?.upcomingEvents?.length || 0}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                In the next 7 days
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-7">
-          <Card className="md:col-span-4 shadow-sm">
-            <CardHeader>
-              <CardTitle>Overview</CardTitle>
-            </CardHeader>
-            <CardContent className="pl-2">
-              <Overview />
-            </CardContent>
-          </Card>
-          <Card className="md:col-span-3 shadow-sm">
+          <Card className="col-span-2 row-span-2 shadow-sm">
             <CardHeader>
               <CardTitle>Recent Activity</CardTitle>
               <CardDescription>
@@ -177,19 +139,18 @@ export default function StudentDashboardPage() {
               <RecentActivity activities={stats?.recentActivity || []} />
             </CardContent>
           </Card>
+          <Card className="col-span-2 shadow-sm">
+            <CardHeader>
+              <CardTitle>Upcoming Events</CardTitle>
+              <CardDescription>
+                Schedule for the next 7 days
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <UpcomingEvents events={stats?.upcomingEvents || []} />
+            </CardContent>
+          </Card>
         </div>
-
-        <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle>Upcoming Events</CardTitle>
-            <CardDescription>
-              Schedule for the next 7 days
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <UpcomingEvents events={stats?.upcomingEvents || []} />
-          </CardContent>
-        </Card>
       </div>
     </StudentDashboardLayout>
   )
