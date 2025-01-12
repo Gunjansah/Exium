@@ -129,13 +129,18 @@ export default function TeacherDashboardLayout({
     return null
   }
 
-  const userInitials = session.user.email
+  if (!session?.user?.email) {
+    return null
+  }
+
+  const userInitials = session.user.email!
     .split('@')[0]
     .split('.')
     .map((n: string) => n[0].toUpperCase())
     .join('')
 
-  const userDisplayName = session.user.email.split('@')[0]
+  const userDisplayName = session.user.email!
+    .split('@')[0]
     .split('.')
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
