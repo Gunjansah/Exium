@@ -48,5 +48,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Monaco Editor
+public/monaco-editor/
 
 /resources
+
+.cursorrules

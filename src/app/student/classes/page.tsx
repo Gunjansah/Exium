@@ -1,11 +1,9 @@
 'use client'
 
-import { JoinByCode } from '@/components/student-dashboard/classes/JoinByCode'
-import { AvailableClasses } from '@/components/student-dashboard/classes/AvailableClasses'
+import { useQuery } from '@tanstack/react-query'
+import { format } from 'date-fns'
+import { GraduationCap, Users, Calendar, FileText } from 'lucide-react'
 import StudentDashboardLayout from '@/components/student-dashboard/layout/StudentDashboardLayout'
-<<<<<<< HEAD
-import { Separator } from '@/components/ui/separator'
-=======
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -103,36 +101,23 @@ export default function ClassesPage() {
       </StudentDashboardLayout>
     )
   }
->>>>>>> abcca83ed428e22478a4928ede185605aacb585d
 
-export default function StudentClassesPage() {
   return (
     <StudentDashboardLayout>
-      <div className="container mx-auto py-6 space-y-8">
+      <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">My Classes</h1>
           <p className="text-muted-foreground">
-            Join and manage your class enrollments
+            View and manage your class enrollments
           </p>
         </div>
 
-        <Separator />
+        <Tabs defaultValue="enrolled" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="enrolled">Enrolled Classes</TabsTrigger>
+            <TabsTrigger value="available">Available Classes</TabsTrigger>
+          </TabsList>
 
-<<<<<<< HEAD
-        {/* Join by Code Section */}
-        <div className="space-y-4">
-          <h2 className="text-2xl font-semibold tracking-tight">Join a Class</h2>
-          <JoinByCode />
-        </div>
-
-        <Separator />
-
-        {/* Available Classes Section */}
-        <div className="space-y-4">
-          <h2 className="text-2xl font-semibold tracking-tight">Available Classes</h2>
-          <AvailableClasses />
-        </div>
-=======
           <TabsContent value="enrolled" className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               {classes?.enrolled.map((cls) => (
@@ -263,7 +248,6 @@ export default function StudentClassesPage() {
             </div>
           </TabsContent>
         </Tabs>
->>>>>>> abcca83ed428e22478a4928ede185605aacb585d
       </div>
     </StudentDashboardLayout>
   )

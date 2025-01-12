@@ -56,7 +56,7 @@ export default function ExamsPage() {
   }
 
   const handleResumeExam = async (examId: string) => {
-    router.push(`/student/exams/${examId}`)
+    router.push(`/student/exams/disclaimer?id=${examId}`)
   }
 
   const handleViewResult = async (examId: string) => {
