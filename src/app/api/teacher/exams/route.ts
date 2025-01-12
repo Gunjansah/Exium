@@ -3,202 +3,415 @@ import { getServerSession } from 'next-auth'
 import { authConfig } from '@/app/lib/auth.config'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import { SecurityLevel } from '@prisma/client'
+import { 
+  QuestionType, 
+  DifficultyLevel, 
+  SecurityLevel, 
+  ExamStatus, 
+  Exam,
+  Question,
+  Class,
+  EventType,
+  EventStatus,
+  Role,
+  ExamEnrollmentStatus,
+  Prisma 
+} from '@prisma/client'
 
-const createExamSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
-  description: z.string().nullable().optional(),
-  duration: z.number().min(1, 'Duration must be at least 1 minute'),
-  startTime: z.date().nullable().optional(),
-  endTime: z.date().nullable().optional(),
-  classId: z.string().min(1, 'Class ID is required'),
-  questions: z.array(z.object({
-    type: z.enum(['MULTIPLE_CHOICE', 'SHORT_ANSWER', 'LONG_ANSWER', 'TRUE_FALSE', 'MATCHING', 'CODING']),
-    difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']),
+const questionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal(QuestionType.MULTIPLE_CHOICE),
+    content: z.string().min(1),
     points: z.number().min(1),
-    content: z.string().min(1, 'Question content is required'),
-    correctAnswer: z.string().optional(),
+    difficulty: z.nativeEnum(DifficultyLevel),
     explanation: z.string().optional(),
     timeLimit: z.number().min(0).optional(),
-    options: z.array(z.string()).optional(),
+    options: z.array(z.object({
+      text: z.string().min(1),
+      isCorrect: z.boolean(),
+      explanation: z.string().optional(),
+    })).min(2),
+    orderIndex: z.number(),
+  }),
+  z.object({
+    type: z.literal(QuestionType.SHORT_ANSWER),
+    content: z.string().min(1),
+    points: z.number().min(1),
+    difficulty: z.nativeEnum(DifficultyLevel),
+    explanation: z.string().optional(),
+    timeLimit: z.number().min(0).optional(),
+    correctAnswer: z.string().min(1),
+    orderIndex: z.number(),
+  }),
+  z.object({
+    type: z.literal(QuestionType.LONG_ANSWER),
+    content: z.string().min(1),
+    points: z.number().min(1),
+    difficulty: z.nativeEnum(DifficultyLevel),
+    explanation: z.string().optional(),
+    timeLimit: z.number().min(0).optional(),
+    correctAnswer: z.string().optional(),
+    rubric: z.string().optional(),
+    orderIndex: z.number(),
+  }),
+  z.object({
+    type: z.literal(QuestionType.TRUE_FALSE),
+    content: z.string().min(1),
+    points: z.number().min(1),
+    difficulty: z.nativeEnum(DifficultyLevel),
+    explanation: z.string().optional(),
+    timeLimit: z.number().min(0).optional(),
+    correctAnswer: z.enum(['true', 'false']),
+    orderIndex: z.number(),
+  }),
+  z.object({
+    type: z.literal(QuestionType.MATCHING),
+    content: z.string().min(1),
+    points: z.number().min(1),
+    difficulty: z.nativeEnum(DifficultyLevel),
+    explanation: z.string().optional(),
+    timeLimit: z.number().min(0).optional(),
+    matchingPairs: z.array(z.object({
+      left: z.string().min(1),
+      right: z.string().min(1),
+    })).min(2),
+    orderIndex: z.number(),
+  }),
+  z.object({
+    type: z.literal(QuestionType.CODING),
+    content: z.string().min(1),
+    points: z.number().min(1),
+    difficulty: z.nativeEnum(DifficultyLevel),
+    explanation: z.string().optional(),
+    timeLimit: z.number().min(0).optional(),
     codeTemplate: z.string().optional(),
+    programmingLanguage: z.string().min(1),
     testCases: z.array(z.object({
       input: z.string(),
-      expectedOutput: z.string(),
+      expectedOutput: z.string().min(1),
       isHidden: z.boolean(),
-    })).optional(),
-  })).optional(),
-  // Security Settings
-  securityLevel: z.nativeEnum(SecurityLevel).optional(),
-  maxViolations: z.number().min(1).optional(),
-  // Security Features
-  fullScreenMode: z.boolean().optional(),
-  blockMultipleTabs: z.boolean().optional(),
-  blockKeyboardShortcuts: z.boolean().optional(),
-  blockRightClick: z.boolean().optional(),
-  blockClipboard: z.boolean().optional(),
-  browserMonitoring: z.boolean().optional(),
-  blockSearchEngines: z.boolean().optional(),
-  resumeCount: z.number().min(0).optional(),
-  webcamRequired: z.boolean().optional(),
-  deviceTracking: z.boolean().optional(),
-  screenshotBlocking: z.boolean().optional(),
-  periodicUserValidation: z.boolean().optional(),
+      explanation: z.string().optional(),
+    })).min(1),
+    orderIndex: z.number(),
+  }),
+])
+
+const examSchema = z.object({
+  id: z.string().optional(),
+  title: z.string().min(1),
+  description: z.string().nullable(),
+  duration: z.number().min(1),
+  startTime: z.string().nullable(),
+  endTime: z.string().nullable(),
+  classId: z.string(),
+  questions: z.array(questionSchema),
+  securityLevel: z.nativeEnum(SecurityLevel),
+  maxViolations: z.number().min(1),
+  fullScreenMode: z.boolean(),
+  blockMultipleTabs: z.boolean(),
+  blockKeyboardShortcuts: z.boolean(),
+  blockRightClick: z.boolean(),
+  blockClipboard: z.boolean(),
+  browserMonitoring: z.boolean(),
+  blockSearchEngines: z.boolean(),
+  resumeCount: z.number().min(0),
+  webcamRequired: z.boolean(),
+  deviceTracking: z.boolean(),
+  screenshotBlocking: z.boolean(),
+  periodicUserValidation: z.boolean(),
 })
 
-// POST /api/teacher/exams - Create a new exam
-export async function POST(request: Request) {
+export async function POST(req: Request) {
   try {
     const session = await getServerSession(authConfig)
-
-    if (!session?.user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
+    if (!session?.user?.email) {
+      return new NextResponse(
+        JSON.stringify({ success: false, message: 'Unauthorized' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
-    let body
-    try {
-      body = await request.json()
-    } catch (error) {
-      console.error('Failed to parse request body:', error)
-      return NextResponse.json(
-        { success: false, error: 'Invalid request body' },
-        { status: 400 }
-      )
-    }
-
-    if (!body) {
-      return NextResponse.json(
-        { success: false, error: 'Request body is required' },
-        { status: 400 }
-      )
-    }
-
-    console.log('Received request body:', body)
-
-    let validatedData
-    try {
-      validatedData = createExamSchema.parse(body)
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        console.error('Validation error:', error.errors)
-        return NextResponse.json(
-          { success: false, error: error.errors[0].message },
-          { status: 400 }
-        )
-      }
-      throw error
-    }
-
-    // Check if the teacher has access to the class
-    const classExists = await prisma.class.findFirst({
-      where: {
-        id: validatedData.classId,
-        teacherId: session.user.id,
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      include: {
+        teachingClasses: true,
       },
     })
 
-    if (!classExists) {
-      return NextResponse.json(
-        { success: false, error: 'Class not found or unauthorized' },
-        { status: 404 }
+    if (!user || user.role !== 'TEACHER') {
+      return new NextResponse(
+        JSON.stringify({ success: false, message: 'Unauthorized' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
-    // Create the exam
-    const exam = await prisma.exam.create({
-      data: {
+    const body = await req.json()
+    if (!body) {
+      return new NextResponse(
+        JSON.stringify({ message: 'Request body is required' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const validatedData = examSchema.parse(body)
+
+    // Verify class access
+    const hasAccess = user.teachingClasses.some(c => c.id === validatedData.classId)
+    if (!hasAccess) {
+      return new NextResponse(
+        JSON.stringify({ success: false, message: 'Unauthorized access to class' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Use transaction to ensure all operations succeed or fail together
+    const result = await prisma.$transaction(async (tx) => {
+      let exam: Exam & {
+        questions: Question[];
+        class: Class;
+        _count: { enrollments: number; submissions: number; questions: number };
+      }
+
+      const examData: Prisma.ExamCreateInput = {
         title: validatedData.title,
         description: validatedData.description,
         duration: validatedData.duration,
-        startTime: validatedData.startTime,
-        endTime: validatedData.endTime,
-        classId: validatedData.classId,
-        createdBy: session.user.id,
-        status: 'DRAFT',
-        // Security Settings
-        securityLevel: validatedData.securityLevel ?? SecurityLevel.MINIMAL,
-        maxViolations: validatedData.maxViolations ?? 3,
-        // Security Features
-        fullScreenMode: validatedData.fullScreenMode ?? false,
-        blockMultipleTabs: validatedData.blockMultipleTabs ?? false,
-        blockKeyboardShortcuts: validatedData.blockKeyboardShortcuts ?? false,
-        blockRightClick: validatedData.blockRightClick ?? false,
-        blockClipboard: validatedData.blockClipboard ?? false,
-        browserMonitoring: validatedData.browserMonitoring ?? false,
-        blockSearchEngines: validatedData.blockSearchEngines ?? false,
-        resumeCount: validatedData.resumeCount ?? 0,
-        webcamRequired: validatedData.webcamRequired ?? false,
-        deviceTracking: validatedData.deviceTracking ?? false,
-        screenshotBlocking: validatedData.screenshotBlocking ?? false,
-        periodicUserValidation: validatedData.periodicUserValidation ?? false,
-      },
-      include: {
+        startTime: validatedData.startTime ? new Date(validatedData.startTime) : null,
+        endTime: validatedData.endTime ? new Date(validatedData.endTime) : null,
         class: {
-          select: {
-            id: true,
-            name: true,
-            code: true,
-          },
+          connect: { id: validatedData.classId },
         },
-      },
+        teacher: {
+          connect: { id: user.id },
+        },
+        status: validatedData.id ? undefined : ExamStatus.DRAFT,
+        securityLevel: validatedData.securityLevel,
+        maxViolations: validatedData.maxViolations,
+        fullScreenMode: validatedData.fullScreenMode,
+        blockMultipleTabs: validatedData.blockMultipleTabs,
+        blockKeyboardShortcuts: validatedData.blockKeyboardShortcuts,
+        blockRightClick: validatedData.blockRightClick,
+        blockClipboard: validatedData.blockClipboard,
+        browserMonitoring: validatedData.browserMonitoring,
+        blockSearchEngines: validatedData.blockSearchEngines,
+        resumeCount: validatedData.resumeCount,
+        webcamRequired: validatedData.webcamRequired,
+        deviceTracking: validatedData.deviceTracking,
+        screenshotBlocking: validatedData.screenshotBlocking,
+        periodicUserValidation: validatedData.periodicUserValidation,
+      }
+
+      if (validatedData.id) {
+        // Update existing exam
+        await tx.question.deleteMany({
+          where: { examId: validatedData.id },
+        })
+
+        exam = await tx.exam.update({
+          where: { id: validatedData.id },
+          data: examData,
+          include: {
+            questions: true,
+            class: true,
+            _count: {
+              select: {
+                enrollments: true,
+                submissions: true,
+                questions: true,
+              },
+            },
+          },
+        })
+      } else {
+        // Create new exam
+        exam = await tx.exam.create({
+          data: examData,
+          include: {
+            questions: true,
+            class: true,
+            _count: {
+              select: {
+                enrollments: true,
+                submissions: true,
+                questions: true,
+              },
+            },
+          },
+        })
+      }
+
+      // Create questions
+      if (validatedData.questions?.length > 0) {
+        const questions = await tx.question.createMany({
+          data: validatedData.questions.map((q, index) => ({
+            examId: exam.id,
+            type: q.type,
+            content: q.content,
+            points: q.points,
+            difficulty: q.difficulty,
+            explanation: q.explanation,
+            timeLimit: q.timeLimit,
+            orderIndex: index,
+            options: q.type === QuestionType.MULTIPLE_CHOICE ? q.options : undefined,
+            correctAnswer: 'correctAnswer' in q ? q.correctAnswer : undefined,
+            codeTemplate: 'codeTemplate' in q ? q.codeTemplate : undefined,
+            testCases: 'testCases' in q ? q.testCases : undefined,
+            rubric: 'rubric' in q ? q.rubric : undefined,
+            programmingLanguage: 'programmingLanguage' in q ? q.programmingLanguage : undefined,
+          })),
+        })
+
+        // Refresh exam with created questions
+        exam = await tx.exam.findUniqueOrThrow({
+          where: { id: exam.id },
+          include: {
+            questions: {
+              orderBy: { orderIndex: 'asc' },
+            },
+            class: true,
+            _count: {
+              select: {
+                enrollments: true,
+                submissions: true,
+                questions: true,
+              },
+            },
+          },
+        })
+      }
+
+      // Handle calendar event
+      if (validatedData.startTime) {
+        const calendarEventData = {
+          title: `Exam: ${validatedData.title}`,
+          description: validatedData.description,
+          startTime: new Date(validatedData.startTime),
+          endTime: validatedData.endTime ? new Date(validatedData.endTime) : null,
+          type: EventType.EXAM,
+          status: EventStatus.UPCOMING,
+          user: { connect: { id: user.id } },
+          class: { connect: { id: validatedData.classId } },
+          exam: { connect: { id: exam.id } },
+        }
+
+        if (validatedData.id) {
+          // Update existing calendar event
+          await tx.calendarEvent.updateMany({
+            where: { examId: validatedData.id },
+            data: {
+              title: calendarEventData.title,
+              description: calendarEventData.description,
+              startTime: calendarEventData.startTime,
+              endTime: calendarEventData.endTime,
+              status: EventStatus.UPCOMING,
+            },
+          })
+        } else {
+          // Create new calendar event
+          await tx.calendarEvent.create({
+            data: calendarEventData,
+          })
+        }
+      }
+
+      // Create exam enrollments for all students in the class
+      const classStudents = await tx.classEnrollment.findMany({
+        where: {
+          classId: validatedData.classId,
+          role: Role.STUDENT,
+        },
+      })
+
+      if (!validatedData.id) { // Only create enrollments for new exams
+        await tx.examEnrollment.createMany({
+          data: classStudents.map(student => ({
+            examId: exam.id,
+            userId: student.userId,
+            status: ExamEnrollmentStatus.NOT_STARTED,
+          })),
+          skipDuplicates: true,
+        })
+      }
+
+      return exam
     })
 
-    if (validatedData.questions && validatedData.questions.length > 0) {
-      await prisma.question.createMany({
-        data: validatedData.questions.map((question, index) => ({
-          ...question,
-          examId: exam.id,
-          orderIndex: index,
-        })),
-      })
-    }
-
-    return NextResponse.json({
+    return NextResponse.json({ 
       success: true,
-      data: {
-        ...exam,
-        questions: validatedData.questions || [],
-      },
+      data: result 
+    }, {
+      headers: { 'Content-Type': 'application/json' },
     })
   } catch (error) {
-    console.error('Failed to create exam:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to create exam' },
-      { status: 500 }
+    console.error('Error in exam API:', error)
+    if (error instanceof z.ZodError) {
+      return new NextResponse(
+        JSON.stringify({ 
+          success: false,
+          errors: error.errors 
+        }),
+        { 
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      )
+    }
+    return new NextResponse(
+      JSON.stringify({ 
+        success: false,
+        message: 'Error processing request',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }),
+      { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }
     )
   }
 }
 
-// GET /api/teacher/exams - Get all exams for the teacher
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await getServerSession(authConfig)
+    if (!session?.user?.email) {
+      return new NextResponse(
+        JSON.stringify({ success: false, message: 'Unauthorized' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
 
-    if (!session?.user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+    })
+
+    if (!user || user.role !== 'TEACHER') {
+      return new NextResponse(
+        JSON.stringify({ success: false, message: 'Unauthorized' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
     const exams = await prisma.exam.findMany({
       where: {
-        createdBy: session.user.id,
+        createdBy: user.id,
       },
       include: {
         class: {
           select: {
             id: true,
             name: true,
-            code: true,
+          },
+        },
+        questions: {
+          orderBy: {
+            orderIndex: 'asc',
           },
         },
         _count: {
           select: {
             enrollments: true,
+            submissions: true,
+            questions: true,
           },
         },
       },
@@ -207,11 +420,62 @@ export async function GET() {
       },
     })
 
-    return NextResponse.json({ success: true, data: exams })
+    // If no exams found, return empty array instead of null
+    return NextResponse.json({ 
+      success: true,
+      data: exams || [] 
+    }, {
+      headers: { 'Content-Type': 'application/json' },
+    })
   } catch (error) {
-    console.error('Failed to fetch exams:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch exams' },
+    console.error('Error in exam API:', error)
+    return new NextResponse(
+      JSON.stringify({ 
+        success: false,
+        message: 'Error processing request',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }),
+      { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    )
+  }
+}
+
+export async function PUT(req: Request) {
+  try {
+    const session = await getServerSession(authConfig)
+    if (!session?.user?.email) {
+      return new NextResponse('Unauthorized', { status: 401 })
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+    })
+
+    if (!user || user.role !== 'TEACHER') {
+      return new NextResponse('Unauthorized', { status: 401 })
+    }
+
+    const body = await req.json()
+    const validatedData = examSchema.parse(body)
+
+    if (!validatedData.id) {
+      return new NextResponse('Exam ID is required', { status: 400 })
+    }
+
+    // Reuse the POST logic for updates
+    const response = await POST(new Request(req.url, {
+      method: 'POST',
+      body: JSON.stringify(validatedData),
+    }))
+
+    return response
+  } catch (error) {
+    console.error('Error in exam API:', error)
+    return new NextResponse(
+      'Error processing request',
       { status: 500 }
     )
   }

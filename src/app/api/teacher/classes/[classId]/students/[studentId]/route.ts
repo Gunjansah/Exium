@@ -3,9 +3,10 @@ import { getServerSession } from 'next-auth'
 import { authConfig } from '@/app/lib/auth.config'
 import { prisma } from '@/lib/prisma'
 
-export async function GET(
+// DELETE /api/teacher/classes/[classId]/students/[studentId] - Remove a student from the class
+export async function DELETE(
   req: Request,
-  { params }: { params: { classId: string } }
+  { params }: { params: { classId: string; studentId: string } }
 ) {
   try {
     const session = await getServerSession(authConfig)
@@ -28,41 +29,45 @@ export async function GET(
     }
 
     // Verify the class belongs to this teacher
-    const classDetails = await prisma.class.findFirst({
+    const classExists = await prisma.class.findFirst({
       where: {
         id: params.classId,
         teacherId: user.id,
       },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        code: true,
-        teacher: {
-          select: {
-            firstName: true,
-            lastName: true,
-          }
-        },
-        _count: {
-          select: {
-            enrollments: true,
-            exams: true,
-          }
-        }
-      }
     })
 
-    if (!classDetails) {
+    if (!classExists) {
       return NextResponse.json(
         { success: false, message: 'Class not found' },
         { status: 404 }
       )
     }
 
+    // Find and delete the enrollment
+    const enrollment = await prisma.classEnrollment.findFirst({
+      where: {
+        classId: params.classId,
+        userId: params.studentId,
+      },
+    })
+
+    if (!enrollment) {
+      return NextResponse.json(
+        { success: false, message: 'Student is not enrolled in this class' },
+        { status: 404 }
+      )
+    }
+
+    // Delete the enrollment
+    await prisma.classEnrollment.delete({
+      where: {
+        id: enrollment.id,
+      },
+    })
+
     return NextResponse.json({
       success: true,
-      data: classDetails
+      message: 'Student removed successfully'
     })
   } catch (error) {
     return NextResponse.json({
@@ -71,4 +76,4 @@ export async function GET(
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
-}
+} 

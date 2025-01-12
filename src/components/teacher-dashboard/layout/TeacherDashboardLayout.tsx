@@ -141,8 +141,15 @@ export default function TeacherDashboardLayout({
     .join(' ')
 
   const handleSignOut = async () => {
-    await signOut({ redirect: false })
-    router.push('/auth/signin')
+    try {
+      await signOut({ 
+        redirect: true,
+        callbackUrl: '/login'
+      })
+    } catch (error) {
+      console.error('Error signing out:', error)
+      router.push('/login')
+    }
   }
 
   return (
