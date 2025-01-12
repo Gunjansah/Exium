@@ -15,39 +15,57 @@ export async function GET() {
       return new NextResponse('Forbidden', { status: 403 })
     }
 
-    // Get student's exam enrollments
-    const examEnrollments = await prisma.examEnrollment.findMany({
+    // First get all classes the student is enrolled in
+    const enrolledClasses = await prisma.classEnrollment.findMany({
       where: {
         userId: session.user.id,
+        role: 'STUDENT',
+      },
+      select: {
+        classId: true,
+      },
+    })
+
+    const classIds = enrolledClasses.map(ec => ec.classId)
+
+    // Get all exams from enrolled classes
+    const exams = await prisma.exam.findMany({
+      where: {
+        classId: {
+          in: classIds,
+        },
+        status: {
+          in: ['PUBLISHED', 'ACTIVE', 'COMPLETED'],
+        },
       },
       select: {
         id: true,
-        status: true,
-        score: true,
+        title: true,
+        description: true,
         startTime: true,
         endTime: true,
-        submittedAt: true,
-        exam: {
+        duration: true,
+        status: true,
+        class: {
           select: {
             id: true,
-            title: true,
-            description: true,
+            name: true,
+          },
+        },
+        enrollments: {
+          where: {
+            userId: session.user.id,
+          },
+          select: {
+            id: true,
+            status: true,
             startTime: true,
             endTime: true,
-            duration: true,
-            totalMarks: true,
-            class: {
-              select: {
-                name: true,
-              },
-            },
           },
         },
       },
       orderBy: {
-        exam: {
-          startTime: 'asc',
-        },
+        startTime: 'asc',
       },
     })
 
@@ -57,27 +75,43 @@ export async function GET() {
     const active: any[] = []
     const completed: any[] = []
 
-    examEnrollments.forEach(enrollment => {
+    exams.forEach(exam => {
+      const enrollment = exam.enrollments[0]
       const examData = {
-        id: enrollment.exam.id,
-        title: enrollment.exam.title,
-        description: enrollment.exam.description,
-        startTime: enrollment.exam.startTime.toISOString(),
-        endTime: enrollment.exam.endTime?.toISOString(),
-        duration: enrollment.exam.duration,
-        totalMarks: enrollment.exam.totalMarks,
-        status: enrollment.status,
-        score: enrollment.score,
-        class: enrollment.exam.class,
-        submittedAt: enrollment.submittedAt?.toISOString(),
+        id: exam.id,
+        title: exam.title,
+        description: exam.description,
+        startTime: exam.startTime?.toISOString(),
+        endTime: exam.endTime?.toISOString(),
+        duration: exam.duration,
+        status: exam.status,
+        className: exam.class.name,
+        classId: exam.class.id,
+        enrollment: enrollment ? {
+          id: enrollment.id,
+          status: enrollment.status,
+          startTime: enrollment.startTime?.toISOString(),
+          endTime: enrollment.endTime?.toISOString(),
+        } : null,
       }
 
-      if (enrollment.status === 'IN_PROGRESS') {
-        active.push(examData)
-      } else if (enrollment.status === 'COMPLETED' || enrollment.status === 'SUBMITTED') {
-        completed.push(examData)
-      } else if (enrollment.status === 'NOT_STARTED' && enrollment.exam.startTime > now) {
-        upcoming.push(examData)
+      // If student is already enrolled
+      if (enrollment) {
+        if (enrollment.status === 'IN_PROGRESS') {
+          active.push(examData)
+        } else if (enrollment.status === 'COMPLETED' || enrollment.status === 'SUBMITTED') {
+          completed.push(examData)
+        } else if (enrollment.status === 'NOT_STARTED' && exam.startTime && exam.startTime > now) {
+          upcoming.push(examData)
+        }
+      } 
+      // If not enrolled but exam is published/active
+      else if (exam.status === 'PUBLISHED' || exam.status === 'ACTIVE') {
+        if (exam.startTime && exam.startTime > now) {
+          upcoming.push(examData)
+        } else if ((!exam.startTime || exam.startTime <= now) && (!exam.endTime || exam.endTime > now)) {
+          active.push(examData)
+        }
       }
     })
 
