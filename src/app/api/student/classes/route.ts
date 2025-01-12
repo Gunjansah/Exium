@@ -23,14 +23,14 @@ export async function GET() {
           userId: session.user.id,
           role: 'STUDENT',
         },
-        select: {
+        include: {
           class: {
             select: {
               id: true,
               name: true,
               description: true,
-              startDate: true,
-              endDate: true,
+              code: true,
+              createdAt: true,
               teacher: {
                 select: {
                   firstName: true,
@@ -40,34 +40,48 @@ export async function GET() {
               },
               _count: {
                 select: {
-                  students: true,
+                  enrollments: true,
                   exams: true,
                 },
               },
+              exams: {
+                select: {
+                  id: true,
+                  title: true,
+                  description: true,
+                  startTime: true,
+                  endTime: true,
+                  status: true,
+                  duration: true,
+                },
+                where: {
+                  status: {
+                    in: ['PUBLISHED', 'ACTIVE']
+                  }
+                }
+              }
             },
           },
-          joinedAt: true,
         },
         orderBy: {
-          joinedAt: 'desc',
+          enrolledAt: 'desc',
         },
       }),
       // Get available classes (not enrolled)
       prisma.class.findMany({
         where: {
-          students: {
+          enrollments: {
             none: {
               userId: session.user.id,
             },
           },
-          status: 'ACTIVE',
         },
         select: {
           id: true,
           name: true,
           description: true,
-          startDate: true,
-          endDate: true,
+          code: true,
+          createdAt: true,
           teacher: {
             select: {
               firstName: true,
@@ -77,13 +91,13 @@ export async function GET() {
           },
           _count: {
             select: {
-              students: true,
+              enrollments: true,
               exams: true,
             },
           },
         },
         orderBy: {
-          startDate: 'desc',
+          createdAt: 'desc',
         },
       }),
     ])
@@ -93,28 +107,37 @@ export async function GET() {
       id: enrollment.class.id,
       name: enrollment.class.name,
       description: enrollment.class.description,
-      startDate: enrollment.class.startDate.toISOString(),
-      endDate: enrollment.class.endDate?.toISOString(),
+      code: enrollment.class.code,
+      createdAt: enrollment.class.createdAt.toISOString(),
       teacher: {
         name: `${enrollment.class.teacher.firstName} ${enrollment.class.teacher.lastName}`,
         email: enrollment.class.teacher.email,
       },
-      studentsCount: enrollment.class._count.students,
+      studentsCount: enrollment.class._count.enrollments,
       examsCount: enrollment.class._count.exams,
-      joinedAt: enrollment.joinedAt.toISOString(),
+      enrolledAt: enrollment.enrolledAt.toISOString(),
+      exams: enrollment.class.exams.map(exam => ({
+        id: exam.id,
+        title: exam.title,
+        description: exam.description,
+        startTime: exam.startTime?.toISOString(),
+        endTime: exam.endTime?.toISOString(),
+        status: exam.status,
+        duration: exam.duration,
+      })),
     }))
 
     const formattedAvailableClasses = availableClasses.map(cls => ({
       id: cls.id,
       name: cls.name,
       description: cls.description,
-      startDate: cls.startDate.toISOString(),
-      endDate: cls.endDate?.toISOString(),
+      code: cls.code,
+      createdAt: cls.createdAt.toISOString(),
       teacher: {
         name: `${cls.teacher.firstName} ${cls.teacher.lastName}`,
         email: cls.teacher.email,
       },
-      studentsCount: cls._count.students,
+      studentsCount: cls._count.enrollments,
       examsCount: cls._count.exams,
     }))
 
@@ -168,16 +191,15 @@ export async function POST(request: Request) {
         userId: session.user.id,
         classId,
         role: 'STUDENT',
-        status: 'ACTIVE',
       },
-      select: {
+      include: {
         class: {
           select: {
             id: true,
             name: true,
             description: true,
-            startDate: true,
-            endDate: true,
+            code: true,
+            createdAt: true,
             teacher: {
               select: {
                 firstName: true,
@@ -187,13 +209,12 @@ export async function POST(request: Request) {
             },
             _count: {
               select: {
-                students: true,
+                enrollments: true,
                 exams: true,
               },
             },
           },
         },
-        joinedAt: true,
       },
     })
 
@@ -201,15 +222,15 @@ export async function POST(request: Request) {
       id: enrollment.class.id,
       name: enrollment.class.name,
       description: enrollment.class.description,
-      startDate: enrollment.class.startDate.toISOString(),
-      endDate: enrollment.class.endDate?.toISOString(),
+      code: enrollment.class.code,
+      createdAt: enrollment.class.createdAt.toISOString(),
       teacher: {
         name: `${enrollment.class.teacher.firstName} ${enrollment.class.teacher.lastName}`,
         email: enrollment.class.teacher.email,
       },
-      studentsCount: enrollment.class._count.students,
+      studentsCount: enrollment.class._count.enrollments,
       examsCount: enrollment.class._count.exams,
-      joinedAt: enrollment.joinedAt.toISOString(),
+      enrolledAt: enrollment.enrolledAt.toISOString(),
     })
   } catch (error) {
     console.error('Error enrolling in class:', error)

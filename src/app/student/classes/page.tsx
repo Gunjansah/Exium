@@ -13,15 +13,24 @@ interface Class {
   id: string
   name: string
   description: string | null
-  startDate: string
-  endDate?: string
+  code: string
+  createdAt: string
   teacher: {
     name: string
     email: string
   }
   studentsCount: number
   examsCount: number
-  joinedAt?: string
+  enrolledAt?: string
+  exams?: Array<{
+    id: string
+    title: string
+    description: string | null
+    startTime: string | null
+    endTime: string | null
+    status: string
+    duration: number
+  }>
 }
 
 interface ClassesData {
@@ -132,19 +141,43 @@ export default function ClassesPage() {
                       <div className="flex items-center space-x-4 text-sm">
                         <div className="flex items-center">
                           <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
-                          <span>
-                            {format(new Date(cls.startDate), 'PPP')}
-                            {cls.endDate && ` - ${format(new Date(cls.endDate), 'PPP')}`}
-                          </span>
+                          <span>Created {format(new Date(cls.createdAt), 'PPP')}</span>
                         </div>
                         <div className="flex items-center">
                           <FileText className="mr-2 h-4 w-4 text-muted-foreground" />
                           <span>{cls.examsCount} exams</span>
                         </div>
                       </div>
-                      {cls.joinedAt && (
+                      {cls.enrolledAt && (
                         <div className="text-xs text-muted-foreground">
-                          Joined {format(new Date(cls.joinedAt), 'PPP')}
+                          Joined {format(new Date(cls.enrolledAt), 'PPP')}
+                        </div>
+                      )}
+                      {cls.exams && cls.exams.length > 0 && (
+                        <div className="mt-4 space-y-2">
+                          <h4 className="text-sm font-semibold">Upcoming Exams</h4>
+                          {cls.exams.map(exam => (
+                            <div key={exam.id} className="rounded-md border p-3 text-sm">
+                              <div className="font-medium">{exam.title}</div>
+                              {exam.description && (
+                                <div className="text-muted-foreground text-xs mt-1">{exam.description}</div>
+                              )}
+                              <div className="flex items-center gap-x-4 mt-2 text-xs">
+                                <div className="flex items-center">
+                                  <Calendar className="mr-1 h-3 w-3" />
+                                  <span>
+                                    {exam.startTime ? format(new Date(exam.startTime), 'PPp') : 'Not scheduled'}
+                                  </span>
+                                </div>
+                                <div>Duration: {exam.duration} minutes</div>
+                                <div className="ml-auto">
+                                  <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset">
+                                    {exam.status}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
@@ -186,10 +219,7 @@ export default function ClassesPage() {
                       <div className="flex items-center space-x-4 text-sm">
                         <div className="flex items-center">
                           <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
-                          <span>
-                            {format(new Date(cls.startDate), 'PPP')}
-                            {cls.endDate && ` - ${format(new Date(cls.endDate), 'PPP')}`}
-                          </span>
+                          <span>Created {format(new Date(cls.createdAt), 'PPP')}</span>
                         </div>
                         <div className="flex items-center">
                           <FileText className="mr-2 h-4 w-4 text-muted-foreground" />

@@ -15,16 +15,18 @@ interface Exam {
   id: string
   title: string
   description: string | null
-  startTime: string
-  endTime: string
+  startTime: string | null
+  endTime: string | null
   duration: number
-  totalMarks: number
-  status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'SUBMITTED'
-  score?: number
-  class: {
-    name: string
-  }
-  submittedAt?: string
+  status: string
+  className: string
+  classId: string
+  enrollment: {
+    id: string
+    status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'SUBMITTED'
+    startTime: string | null
+    endTime: string | null
+  } | null
 }
 
 interface ExamsData {
@@ -104,9 +106,11 @@ export default function ExamsPage() {
                     <div className="flex items-center justify-between">
                       <div className="space-y-1">
                         <CardTitle>{exam.title}</CardTitle>
-                        <CardDescription>{exam.class.name}</CardDescription>
+                        <CardDescription>{exam.className}</CardDescription>
                       </div>
-                      <Badge variant="secondary">In Progress</Badge>
+                      <Badge variant="secondary">
+                        {exam.enrollment?.status || exam.status}
+                      </Badge>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -116,20 +120,28 @@ export default function ExamsPage() {
                           <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
                           <span>{exam.duration} minutes</span>
                         </div>
-                        <div className="flex items-center">
-                          <FileText className="mr-2 h-4 w-4 text-muted-foreground" />
-                          <span>{exam.totalMarks} marks</span>
-                        </div>
+                        {exam.description && (
+                          <div className="flex items-center">
+                            <FileText className="mr-2 h-4 w-4 text-muted-foreground" />
+                            <span>{exam.description}</span>
+                          </div>
+                        )}
                       </div>
-                      <div className="space-y-2">
-                        <div className="text-sm">Time Remaining</div>
-                        <Progress value={75} />
+                      <div className="flex items-center">
+                        <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
+                        <span>
+                          {exam.startTime ? format(new Date(exam.startTime), 'PPp') : 'Not scheduled'}
+                        </span>
                       </div>
                       <Button
                         className="w-full"
-                        onClick={() => handleResumeExam(exam.id)}
+                        onClick={() => exam.enrollment?.status === 'IN_PROGRESS' 
+                          ? handleResumeExam(exam.id)
+                          : handleStartExam(exam.id)
+                        }
+                        disabled={exam.startTime ? new Date(exam.startTime) > new Date() : false}
                       >
-                        Resume Exam
+                        {exam.enrollment?.status === 'IN_PROGRESS' ? 'Resume Exam' : 'Start Exam'}
                       </Button>
                     </div>
                   </CardContent>
@@ -155,7 +167,7 @@ export default function ExamsPage() {
                     <div className="flex items-center justify-between">
                       <div className="space-y-1">
                         <CardTitle>{exam.title}</CardTitle>
-                        <CardDescription>{exam.class.name}</CardDescription>
+                        <CardDescription>{exam.className}</CardDescription>
                       </div>
                       <Badge>Upcoming</Badge>
                     </div>
@@ -167,21 +179,23 @@ export default function ExamsPage() {
                           <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
                           <span>{exam.duration} minutes</span>
                         </div>
-                        <div className="flex items-center">
-                          <FileText className="mr-2 h-4 w-4 text-muted-foreground" />
-                          <span>{exam.totalMarks} marks</span>
-                        </div>
+                        {exam.description && (
+                          <div className="flex items-center">
+                            <FileText className="mr-2 h-4 w-4 text-muted-foreground" />
+                            <span>{exam.description}</span>
+                          </div>
+                        )}
                       </div>
-                      <div className="text-sm">
-                        <div className="flex items-center">
-                          <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
-                          Starts: {format(new Date(exam.startTime), 'PPp')}
-                        </div>
+                      <div className="flex items-center">
+                        <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
+                        <span>
+                          {exam.startTime ? format(new Date(exam.startTime), 'PPp') : 'Not scheduled'}
+                        </span>
                       </div>
                       <Button
                         className="w-full"
                         onClick={() => handleStartExam(exam.id)}
-                        disabled={new Date(exam.startTime) > new Date()}
+                        disabled={exam.startTime ? new Date(exam.startTime) > new Date() : false}
                       >
                         Start Exam
                       </Button>
@@ -209,7 +223,7 @@ export default function ExamsPage() {
                     <div className="flex items-center justify-between">
                       <div className="space-y-1">
                         <CardTitle>{exam.title}</CardTitle>
-                        <CardDescription>{exam.class.name}</CardDescription>
+                        <CardDescription>{exam.className}</CardDescription>
                       </div>
                       <Badge variant="outline">Completed</Badge>
                     </div>
@@ -217,18 +231,20 @@ export default function ExamsPage() {
                   <CardContent>
                     <div className="space-y-4">
                       <div className="flex items-center space-x-4 text-sm">
-                        <div className="flex items-center">
-                          <CheckCircle className="mr-2 h-4 w-4 text-green-500" />
-                          <span>Score: {exam.score} / {exam.totalMarks}</span>
-                        </div>
+                        {exam.description && (
+                          <div className="flex items-center">
+                            <FileText className="mr-2 h-4 w-4 text-muted-foreground" />
+                            <span>{exam.description}</span>
+                          </div>
+                        )}
                         <div className="flex items-center">
                           <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
                           <span>{exam.duration} minutes</span>
                         </div>
                       </div>
-                      {exam.submittedAt && (
+                      {exam.enrollment?.endTime && (
                         <div className="text-sm text-muted-foreground">
-                          Submitted: {format(new Date(exam.submittedAt), 'PPp')}
+                          Completed: {format(new Date(exam.enrollment.endTime), 'PPp')}
                         </div>
                       )}
                       <Button
