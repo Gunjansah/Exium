@@ -56,7 +56,7 @@ export default function ClassesPage() {
 
   const handleEnroll = async (classId: string) => {
     try {
-      const response = await fetch('/api/student/classes', {
+      const response = await fetch('/api/student/classes/enroll', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
