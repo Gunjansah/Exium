@@ -432,9 +432,10 @@ export default function ExamInterface() {
   };
 
   const handleSubmit = async () => {
-    setIsSubmitting(true)
     try {
-      if (!examData || !session?.user) {
+      setIsSubmitting(true)
+      
+      if (!examData || !session?.user?.email) {
         throw new Error('Missing exam data or user session')
       }
 
@@ -448,10 +449,10 @@ export default function ExamInterface() {
         }
       })
 
-      // Create a JSON blob and trigger download
-      const jsonData = JSON.stringify({
+      // Create submission data
+      const submissionData = {
         examId: examData.id,
-        studentId: session.user.email || 'unknown',
+        studentId: session.user.email,
         submittedAt: new Date().toISOString(),
         answers: answers,
         securityReport: {
@@ -466,23 +467,44 @@ export default function ExamInterface() {
           fullscreenExitCount: securityViolations.filter(v => v.includes('Fullscreen')).length,
           plagiarismWarnings: securityViolations.filter(v => v.includes('plagiarism')).length
         }
-      }, null, 2)
+      }
 
-      const blob = new Blob([jsonData], { type: 'application/json' })
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `exam_${examData.id}_submission.json`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      // Update exam enrollment status in the database
+      const response = await fetch('/api/exams/complete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          examId: examData.id,
+          userId: session.user.email,
+          answers: submissionData
+        }),
+      })
 
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error('Submission error:', errorData)
+        throw new Error(errorData.error || 'Failed to submit exam')
+      }
+
+      // Only exit fullscreen and redirect after successful submission
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+      }
       router.push('/student/exams')
     } catch (error) {
       console.error('Submission failed:', error)
+      setShowPlagiarismWarning(false) // Hide any existing modal
+      
+      const errorMessage = error instanceof Error ? error.message : 'Failed to submit exam. Please try again'
+      if (!securityViolations.includes(errorMessage)) {
+        setSecurityViolations(prev => [...prev, errorMessage])
+      }
+      setShowSecurityStatus(true)
+    } finally {
+      setIsSubmitting(false)
     }
-    setIsSubmitting(false)
   }
 
   const formatTime = (seconds: number) => {
