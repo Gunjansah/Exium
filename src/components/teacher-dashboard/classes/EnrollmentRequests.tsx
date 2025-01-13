@@ -40,6 +40,23 @@ export function EnrollmentRequests({ classId }: EnrollmentRequestsProps) {
     },
   })
 
+  
+  const handleRequestApproval = async (requestId: string) => {
+    console.log('Entered handleRequestApproval', requestId)
+    const response = await fetch('../../api/teacher/classes/enrollmentApproval', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({requestId}),
+    })
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.message || 'Failed to process enrollment request')
+    }
+    return response.json()
+  }
+
   const handleRequestMutation = useMutation({
     mutationFn: async ({
       requestId,
@@ -131,27 +148,20 @@ export function EnrollmentRequests({ classId }: EnrollmentRequestsProps) {
               <p className="text-sm text-muted-foreground">
                 Student Email: {request.user.email}
               </p>
+              <p className="text-sm text-muted-foreground">
+                Request id : {request.id}
+              </p>
             </CardContent>
             <CardFooter className="flex justify-end gap-4">
               <Button
                 variant="outline"
-                onClick={() =>
-                  handleRequestMutation.mutate({
-                    requestId: request.id,
-                    action: 'REJECTED',
-                  })
-                }
+                onClick={() =>handleRequestApproval(request.id)}
                 disabled={handleRequestMutation.isPending}
               >
                 Reject
               </Button>
               <Button
-                onClick={() =>
-                  handleRequestMutation.mutate({
-                    requestId: request.id,
-                    action: 'APPROVED',
-                  })
-                }
+                onClick={() =>{handleRequestApproval(request.id)}}
                 disabled={handleRequestMutation.isPending}
               >
                 {handleRequestMutation.isPending && (
