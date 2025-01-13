@@ -1,9 +1,8 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { X } from 'lucide-react'
-import { Monaco, EditorProps } from '@monaco-editor/react'
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false })
 
@@ -42,16 +41,27 @@ const languages: Language[] = [
   { id: 85, name: 'R (4.0.0)' }
 ]
 
-export default function Judge0Tester() {
+interface Judge0TesterProps {
+  onCodeChange?: (code: string) => void;
+  initialCode?: string;
+}
+
+export default function Judge0Tester({ onCodeChange, initialCode = 'print("Hello, World!")' }: Judge0TesterProps) {
   const [processing, setProcessing] = useState<boolean>(false)
   const [result, setResult] = useState<SubmissionResult | null>(null)
-  const [code, setCode] = useState<string>('print("Hello, World!")')
+  const [code, setCode] = useState<string>(initialCode)
   const [language, setLanguage] = useState<Language>(languages[0])
   const [showOutput, setShowOutput] = useState(true)
 
+  useEffect(() => {
+    setCode(initialCode);
+    setResult(null);
+    setShowOutput(true);
+  }, [initialCode]);
+
   const checkStatus = async (token: string): Promise<void> => {
     try {
-      const response = await fetch(`http://10.0.0.216:2358/submissions/${token}`)
+      const response = await fetch(`http://3.135.196.174:2358/submissions/${token}`)
       const result: SubmissionResult = await response.json()
       const statusId = result.status?.id
 
@@ -92,7 +102,10 @@ export default function Judge0Tester() {
 
     try {
       console.log('Submitting code...')
-      const submitResponse = await fetch('http://10.0.0.216:2358/submissions', {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const submitResponse = await fetch('http://3.135.196.174:2358/submissions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -108,34 +121,35 @@ export default function Judge0Tester() {
           stack_limit: 64000,
           max_processes_and_or_threads: 60,
           enable_per_process_and_thread_time_limit: true,
-          enable_per_process_and_thread_memory_limit: true,
-          max_file_size: 1024,
-          enable_network: true
         }),
-      })
-  
-      const submitData = await submitResponse.json()
-      console.log('Submission response:', submitData)
-  
-      await checkStatus(submitData.token)
-  
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!submitResponse.ok) {
+        throw new Error('Failed to submit code');
+      }
+
+      const data = await submitResponse.json();
+      await checkStatus(data.token);
     } catch (error) {
-      console.error('Test failed:', error)
-      setProcessing(false)
+      console.error('Error submitting code:', error);
+      setResult({
+        status: {
+          id: -1,
+          description: '❌ Error: Unable to communicate with the server. Please try again later.'
+        },
+        stderr: 'Failed to fetch results from the server. Please check your network connection or try again later.'
+      });
     }
   }
 
-  const editorProps: EditorProps = {
-    height: "100%",
-    language: language.name.toLowerCase().split(' ')[0],
-    value: code,
-    onChange: (value: string | undefined) => setCode(value || ''),
-    theme: "vs-dark",
-    options: {
-      minimap: { enabled: false },
-      fontSize: 14,
-    }
-  }
+  const handleCodeChange = (value: string | undefined) => {
+    const newCode = value || '';
+    setCode(newCode);
+    onCodeChange?.(newCode);
+  };
 
   return (
     <div className="space-y-4 h-full flex flex-col">
@@ -165,7 +179,17 @@ export default function Judge0Tester() {
 
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <div className={`${result && showOutput ? 'h-[70%]' : 'h-full'} transition-all duration-200`}>
-          <MonacoEditor {...editorProps} />
+          <MonacoEditor
+            height="100%"
+            language={language.name.toLowerCase().split(' ')[0]}
+            value={code}
+            onChange={handleCodeChange}
+            theme="vs-dark"
+            options={{
+              minimap: { enabled: false },
+              fontSize: 14,
+            }}
+          />
         </div>
 
         {result && showOutput && (
@@ -184,22 +208,24 @@ export default function Judge0Tester() {
             
             <div className="flex-1 overflow-auto">
               <div className="p-4 space-y-2">
-                {result.stdout && (
+                {result.stdout ? (
                   <div>
                     <p className="text-sm text-gray-400 mb-1">Output:</p>
                     <pre className="bg-[#1E1E1E] p-3 rounded text-sm font-mono overflow-auto max-h-[200px]">{result.stdout}</pre>
                   </div>
-                )}
-                {result.stderr && (
+                ) : result.stderr ? (
                   <div>
                     <p className="text-sm text-red-400 mb-1">Error:</p>
                     <pre className="bg-[#1E1E1E] p-3 rounded text-sm font-mono overflow-auto max-h-[200px] text-red-400">{result.stderr}</pre>
                   </div>
-                )}
-                {result.compile_output && (
+                ) : result.compile_output ? (
                   <div>
                     <p className="text-sm text-yellow-400 mb-1">Compilation Output:</p>
                     <pre className="bg-[#1E1E1E] p-3 rounded text-sm font-mono overflow-auto max-h-[200px] text-yellow-400">{result.compile_output}</pre>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">No output available.</p>
                   </div>
                 )}
               </div>

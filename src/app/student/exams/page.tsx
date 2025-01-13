@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
+// import { Progress } from '@/components/ui/progress'
 import { useRouter } from 'next/navigation'
 
 interface Exam {
@@ -52,7 +52,7 @@ export default function ExamsPage() {
   })
 
   const handleStartExam = async (examId: string) => {
-    router.push(`/student/exams/${examId}`)
+    router.push(`/student/exams/disclaimer?id=${examId}`)
   }
 
   const handleResumeExam = async (examId: string) => {
