@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authConfig } from '@/app/lib/auth.config'
@@ -41,7 +42,7 @@ export async function PUT(
   try {
     const session = await getServerSession(authConfig)
 
-    if (!session?.user) {
+    if (!session?.user || !(session.user as any).id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -52,7 +53,7 @@ export async function PUT(
     const exam = await prisma.exam.findFirst({
       where: {
         id: params.examId,
-        createdBy: session.user.id,
+        createdBy: (session.user as any).id,
       },
     })
 
@@ -111,7 +112,7 @@ export async function DELETE(
   try {
     const session = await getServerSession(authConfig)
 
-    if (!session?.user) {
+    if (!session?.user || !(session.user as any).id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -122,7 +123,7 @@ export async function DELETE(
     const exam = await prisma.exam.findFirst({
       where: {
         id: params.examId,
-        createdBy: session.user.id,
+        createdBy: (session.user as any).id,
       },
     })
 

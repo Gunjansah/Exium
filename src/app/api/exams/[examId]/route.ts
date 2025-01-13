@@ -28,7 +28,13 @@ export async function GET(
       },
       include: {
         exam: {
-          include: {
+          select: {
+            id: true,
+            title: true,
+            duration: true,
+            status: true,
+            startTime: true,
+            endTime: true,
             class: {
               select: {
                 id: true,
