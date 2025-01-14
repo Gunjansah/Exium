@@ -10,6 +10,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/use-toast'
 import { Loader2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
 
 interface EnrollmentRequest {
   id: string
@@ -28,6 +30,11 @@ interface EnrollmentRequestsProps {
 
 export function EnrollmentRequests({ classId }: EnrollmentRequestsProps) {
   const queryClient = useQueryClient()
+  const router = useRouter()
+
+  const [enrollmentRequests, setEnrollmentRequests] = useState<EnrollmentRequest[]>([])
+
+  
 
   const { data: requests, isLoading } = useQuery<{ data: EnrollmentRequest[] }>({
     queryKey: ['enrollment-requests', classId],
@@ -40,21 +47,44 @@ export function EnrollmentRequests({ classId }: EnrollmentRequestsProps) {
     },
   })
 
+  useEffect(() => {
+    if (requests?.data) {
+      setEnrollmentRequests(requests.data)
+    }
+  }, [requests?.data])
   
   const handleRequestApproval = async (requestId: string) => {
-    console.log('Entered handleRequestApproval', requestId)
-    const response = await fetch('../../api/teacher/classes/enrollmentApproval', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({requestId}),
-    })
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || 'Failed to process enrollment request')
+    try {
+      const response = await fetch('../../api/teacher/classes/enrollmentApproval', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ requestId }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to process enrollment request')
+      }
+
+      setEnrollmentRequests(prevRequests => 
+        prevRequests.filter(request => request.id !== requestId)
+      )
+
+      toast({
+        title: "Success",
+        description: "Enrollment request approved successfully",
+      })
+
+    } catch (error) {
+      console.error('Error approving request:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to approve enrollment request",
+        variant: "destructive",
+      })
     }
-    return response.json()
   }
 
   const handleRequestMutation = useMutation({
@@ -127,51 +157,72 @@ export function EnrollmentRequests({ classId }: EnrollmentRequestsProps) {
       </div>
 
       <div className="grid gap-6">
-        {requests.data.map((request) => (
-          <Card key={request.id}>
+        {enrollmentRequests.length === 0 ? (
+          <Card className="mt-4">
             <CardHeader>
-              <CardTitle>
-                {request.user.firstName && request.user.lastName
-                  ? `${request.user.firstName} ${request.user.lastName}`
-                  : request.user.email}
-              </CardTitle>
+              <CardTitle>No Pending Requests</CardTitle>
               <CardDescription>
-                Requested on{' '}
-                {new Date(request.createdAt).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
+                There are no pending enrollment requests for this class.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Student Email: {request.user.email}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Request id : {request.id}
-              </p>
-            </CardContent>
-            <CardFooter className="flex justify-end gap-4">
-              <Button
-                variant="outline"
-                onClick={() =>handleRequestApproval(request.id)}
-                disabled={handleRequestMutation.isPending}
-              >
-                Reject
-              </Button>
-              <Button
-                onClick={() =>{handleRequestApproval(request.id)}}
-                disabled={handleRequestMutation.isPending}
-              >
-                {handleRequestMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Approve
-              </Button>
-            </CardFooter>
           </Card>
-        ))}
+        ) : (
+          enrollmentRequests.map((request) => (
+            <Card key={request.id}>
+              <CardHeader>
+                <CardTitle>
+                  {request.user.firstName && request.user.lastName
+                    ? `${request.user.firstName} ${request.user.lastName}`
+                    : request.user.email}
+                </CardTitle>
+                <CardDescription>
+                  Requested on{' '}
+                  {new Date(request.createdAt).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Student Email: {request.user.email}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Request id : {request.id}
+                </p>
+              </CardContent>
+              <CardFooter className="flex justify-end gap-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    toast({
+                      title: "Not Implemented",
+                      description: "Reject functionality coming soon",
+                    });
+                  }}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    'Reject'
+                  )}
+                </Button>
+                <Button
+                  onClick={() => handleRequestApproval(request.id)}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    'Approve'
+                  )}
+                </Button>
+              </CardFooter>
+            </Card>
+          ))
+        )}
       </div>
     </div>
   )
