@@ -5,12 +5,13 @@ export default withAuth(
   function middleware(req) {
     const token = req.nextauth.token
     const isAuth = !!token
-    const isAuthPage = req.nextUrl.pathname.startsWith('/login')
+    const isAuthPage = req.nextUrl.pathname.startsWith('/signin') || req.nextUrl.pathname.startsWith('/signup')
 
     if (isAuthPage) {
       if (isAuth) {
         // Redirect to dashboard if user is already logged in
-        return NextResponse.redirect(new URL('/teacher/dashboard', req.url))
+        const dashboardURL = token.role === 'TEACHER' ? '/teacher/dashboard' : '/student/dashboard'
+        return NextResponse.redirect(new URL(dashboardURL, req.url))
       }
       return null
     }
