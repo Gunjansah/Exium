@@ -15,7 +15,7 @@ export default function DisclaimerPage() {
       router.push('/student/exams')
       return
     }
-    router.push(`/student/exams/Exam_Page?id=${examId}`)
+    router.push(`/student/exams/exam-page?id=${examId}`)
   }
 
   if (!examId) {

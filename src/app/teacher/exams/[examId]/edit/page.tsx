@@ -134,6 +134,7 @@ export default function EditExamPage({
                       }}
                       onSubmit={handleSubmit}
                       isLoading={isSubmitting}
+                      classId={exam.classId}
                     />
                   </CardContent>
                 </Card>

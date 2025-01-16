@@ -1,93 +1,68 @@
-import { QuestionType, DifficultyLevel, SecurityLevel, ExamStatus } from '@prisma/client'
+import { QuestionType, DifficultyLevel, ExamStatus, SecurityLevel } from '@prisma/client'
 
-export interface TestCase {
-  id?: string
-  input: string
-  expectedOutput: string
-  isHidden: boolean
-  explanation?: string
-}
-
-export interface QuestionOption {
-  id?: string
-  text: string
-  isCorrect: boolean
-  explanation?: string
-}
-
-export interface MatchingPair {
-  id?: string
-  left: string
-  right: string
-}
-
-export interface QuestionBase {
+// Base question interface
+export interface BaseQuestion {
   id?: string
   type: QuestionType
   content: string
   points: number
   difficulty: DifficultyLevel
-  explanation?: string
+  explanation?: string | null
   timeLimit?: number | null
-  orderIndex?: number
+  orderIndex: number
 }
 
-export interface MultipleChoiceQuestion extends QuestionBase {
+// Multiple choice question
+export interface MultipleChoiceQuestion extends BaseQuestion {
   type: 'MULTIPLE_CHOICE'
-  options: QuestionOption[]
-  correctAnswer?: never
-  testCases?: never
-  codeTemplate?: never
-  matchingPairs?: never
+  options: {
+    text: string
+    isCorrect: boolean
+    explanation?: string | null
+  }[]
 }
 
-export interface ShortAnswerQuestion extends QuestionBase {
+// Short answer question
+export interface ShortAnswerQuestion extends BaseQuestion {
   type: 'SHORT_ANSWER'
   correctAnswer: string
-  options?: never
-  testCases?: never
-  codeTemplate?: never
-  matchingPairs?: never
 }
 
-export interface LongAnswerQuestion extends QuestionBase {
+// Long answer question
+export interface LongAnswerQuestion extends BaseQuestion {
   type: 'LONG_ANSWER'
-  correctAnswer?: string
-  rubric?: string
-  options?: never
-  testCases?: never
-  codeTemplate?: never
-  matchingPairs?: never
+  rubric?: string | null
 }
 
-export interface TrueFalseQuestion extends QuestionBase {
+// True/False question
+export interface TrueFalseQuestion extends BaseQuestion {
   type: 'TRUE_FALSE'
   correctAnswer: 'true' | 'false'
-  options?: never
-  testCases?: never
-  codeTemplate?: never
-  matchingPairs?: never
 }
 
-export interface MatchingQuestion extends QuestionBase {
+// Matching question
+export interface MatchingQuestion extends BaseQuestion {
   type: 'MATCHING'
-  matchingPairs: MatchingPair[]
-  options?: never
-  correctAnswer?: never
-  testCases?: never
-  codeTemplate?: never
+  matchingPairs: {
+    left: string
+    right: string
+  }[]
 }
 
-export interface CodingQuestion extends QuestionBase {
+// Coding question
+export interface CodingQuestion extends BaseQuestion {
   type: 'CODING'
-  codeTemplate?: string
-  testCases: TestCase[]
-  options?: never
-  correctAnswer?: never
-  matchingPairs?: never
   programmingLanguage: string
+  codeTemplate?: string | null
+  testCases: {
+    input: string
+    expectedOutput: string
+    isHidden: boolean
+    explanation?: string | null
+  }[]
 }
 
+// Union type for all question types
 export type Question = 
   | MultipleChoiceQuestion 
   | ShortAnswerQuestion 
@@ -96,18 +71,17 @@ export type Question =
   | MatchingQuestion 
   | CodingQuestion
 
-export interface CreateExamRequest {
+// Form values for creating/editing an exam
+export interface ExamFormValues {
   title: string
-  description?: string | null
+  description?: string
   duration: number
-  startTime?: Date | null
-  endTime?: Date | null
-  classId: string
-  questions: Question[]
-  // Security Settings
+  startTime: Date | null
+  endTime: Date | null
+  classId?: string
+  questions?: Question[]
   securityLevel?: SecurityLevel
   maxViolations?: number
-  // Security Features
   fullScreenMode?: boolean
   blockMultipleTabs?: boolean
   blockKeyboardShortcuts?: boolean
@@ -122,7 +96,21 @@ export interface CreateExamRequest {
   periodicUserValidation?: boolean
 }
 
+// API response interfaces
 export interface ExamResponse {
+  success: boolean
+  data?: Partial<ExamWithDetails> | ExamWithDetails
+  error?: string
+}
+
+export interface ExamListResponse {
+  success: boolean
+  data?: ExamWithDetails[]
+  total?: number
+  error?: string
+}
+
+export interface ExamWithDetails {
   id: string
   title: string
   description?: string | null
@@ -135,6 +123,18 @@ export interface ExamResponse {
   classId: string
   createdBy: string
   questions: Question[]
+  class: {
+    name: string
+  }
+  teacher: {
+    name: string | null
+    email: string
+  }
+  _count: {
+    enrollments: number
+    submissions: number
+    questions: number
+  }
   securityLevel: SecurityLevel
   maxViolations: number
   fullScreenMode: boolean
@@ -151,21 +151,51 @@ export interface ExamResponse {
   periodicUserValidation: boolean
 }
 
-export interface ExamListResponse {
-  exams: ExamResponse[]
-  total: number
-}
-
-export interface ExamWithDetails extends ExamResponse {
-  class: {
-    name: string
-  }
-  teacher: {
-    name: string | null
-    email: string
-  }
-  _count: {
-    enrollments: number
-    submissions: number
-  }
-}
+// Question form values type
+export type QuestionFormValues = {
+  type: QuestionType
+  content: string
+  points: number
+  difficulty: DifficultyLevel
+  explanation?: string
+  timeLimit?: number | null
+} & (
+  | {
+      type: 'MULTIPLE_CHOICE'
+      options: {
+        text: string
+        isCorrect: boolean
+        explanation?: string
+      }[]
+    }
+  | {
+      type: 'SHORT_ANSWER'
+      correctAnswer: string
+    }
+  | {
+      type: 'LONG_ANSWER'
+      rubric?: string
+    }
+  | {
+      type: 'TRUE_FALSE'
+      correctAnswer: 'true' | 'false'
+    }
+  | {
+      type: 'MATCHING'
+      matchingPairs: {
+        left: string
+        right: string
+      }[]
+    }
+  | {
+      type: 'CODING'
+      programmingLanguage: string
+      codeTemplate?: string
+      testCases: {
+        input: string
+        expectedOutput: string
+        isHidden: boolean
+        explanation?: string
+      }[]
+    }
+)

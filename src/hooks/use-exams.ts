@@ -58,8 +58,8 @@ export function useExam(examId: string) {
       const response = await fetch(`/api/teacher/exams/${examId}`)
       const json = (await response.json()) as ExamResponse
 
-      if (!json.success) {
-        throw new Error(json.error)
+      if (!json.success || !json.data) {
+        throw new Error(json.error || 'Failed to fetch exam')
       }
 
       return json.data

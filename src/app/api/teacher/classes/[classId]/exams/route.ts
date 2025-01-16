@@ -1,252 +1,191 @@
-import { NextRequest } from 'next/server'
-import { z } from 'zod'
-import { prisma } from '@/lib/prisma'
+import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { authConfig } from '@/app/lib/auth.config'
-import { QuestionType, DifficultyLevel, ExamStatus, SecurityLevel } from '@prisma/client'
-import { Prisma } from '@prisma/client'
-import { getExamDraft, deleteExamDraft } from '@/lib/redis'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
+import { QuestionType, DifficultyLevel, ExamStatus, SecurityLevel, Prisma } from '@prisma/client'
 
-const questionTypes = [
-  'MULTIPLE_CHOICE',
-  'SHORT_ANSWER',
-  'LONG_ANSWER',
-  'TRUE_FALSE',
-  'MATCHING',
-  'CODING',
-] as const
-
-const createExamSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
-  description: z.string().optional(),
-  timeLimit: z.number().min(0).optional(),
-  dueDate: z.string().optional(),
-  isPublished: z.boolean().default(false),
+const examSchema = z.object({
+  metadata: z.object({
+    title: z.string().min(1, 'Title is required'),
+    description: z.string().optional(),
+    duration: z.number().min(0, 'Duration must be positive'),
+    classId: z.string(),
+  }),
   questions: z.array(z.object({
-    type: z.enum(questionTypes),
+    id: z.number(),
     content: z.string().min(1, 'Question content is required'),
+    type: z.enum(['MULTIPLE_CHOICE', 'SHORT_ANSWER', 'LONG_ANSWER']),
     points: z.number().min(1, 'Points must be at least 1'),
-    difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']),
-    explanation: z.string().optional(),
-    timeLimit: z.number().min(0).optional(),
     options: z.array(z.object({
       text: z.string().min(1, 'Option text is required'),
-      isCorrect: z.boolean(),
-      explanation: z.string().optional(),
     })).optional(),
-    correctAnswer: z.string().optional(),
-    rubric: z.string().optional(),
-    matchingPairs: z.array(z.object({
-      left: z.string().min(1, 'Left side is required'),
-      right: z.string().min(1, 'Right side is required'),
-    })).optional(),
-    codeTemplate: z.string().optional(),
-    testCases: z.array(z.object({
-      input: z.string(),
-      expectedOutput: z.string().min(1, 'Expected output is required'),
-      isHidden: z.boolean(),
-      explanation: z.string().optional(),
-    })).optional(),
-    programmingLanguage: z.string().optional(),
+    timeLimit: z.number().min(0).optional(),
   })).min(1, 'At least one question is required'),
-  // Security settings
-  blockClipboard: z.boolean().default(true),
-  blockKeyboardShortcuts: z.boolean().default(true),
-  blockMultipleTabs: z.boolean().default(true),
-  blockRightClick: z.boolean().default(true),
-  blockSearchEngines: z.boolean().default(true),
-  browserMonitoring: z.boolean().default(true),
-  deviceTracking: z.boolean().default(true),
-  fullScreenMode: z.boolean().default(true),
-  maxViolations: z.number().min(1).default(3),
-  periodicUserValidation: z.boolean().default(true),
-  resumeCount: z.number().min(1).default(1),
-  screenshotBlocking: z.boolean().default(true),
-  securityLevel: z.enum(['STANDARD', 'HIGH', 'CUSTOM']).default('STANDARD'),
-  webcamRequired: z.boolean().default(false),
+  securitySettings: z.object({
+    blockClipboard: z.boolean(),
+    blockKeyboardShortcuts: z.boolean(),
+    blockMultipleTabs: z.boolean(),
+    blockRightClick: z.boolean(),
+    blockSearchEngines: z.boolean(),
+    browserMonitoring: z.boolean(),
+    deviceTracking: z.boolean(),
+    fullScreenMode: z.boolean(),
+    maxViolations: z.number().min(1),
+    periodicUserValidation: z.boolean(),
+    resumeCount: z.number().min(0),
+    screenshotBlocking: z.boolean(),
+    webcamRequired: z.boolean(),
+  }),
 })
 
 export async function POST(
-  req: Request,
+  request: Request,
   { params }: { params: { classId: string } }
 ) {
   try {
-    const session = await getServerSession(authConfig)
-    if (!session?.user?.email) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    console.log('Received POST request for exam creation')
+    
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      console.log('Unauthorized: No session user')
+      return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
+    const body = await request.json()
+    console.log('Request body:', body)
+    
+    const validatedData = examSchema.parse(body)
+    console.log('Validated data:', validatedData)
 
-    if (!user || user.role !== 'TEACHER') {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const classId = params.classId
-    const teacherClass = await prisma.class.findFirst({
+    // Check if user is teacher of the class
+    const classTeacher = await prisma.class.findFirst({
       where: {
-        id: classId,
-        teacherId: user.id,
+        id: params.classId,
+        teacherId: session.user.id,
       },
     })
 
-    if (!teacherClass) {
-      return Response.json(
-        { error: 'Class not found or unauthorized' },
-        { status: 404 }
-      )
+    if (!classTeacher) {
+      console.log('Unauthorized: User is not teacher of class')
+      return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    // Get exam data from Redis draft or request body
-    let examData
-    const body = await req.json()
-    
-    if (body.fromDraft) {
-      // If creating from draft, get the draft data
-      examData = await getExamDraft(user.id)
-      if (!examData) {
-        return Response.json(
-          { error: 'No draft found' },
-          { status: 404 }
-        )
-      }
-    } else {
-      // If not from draft, validate the request body
-      examData = createExamSchema.parse(body)
-    }
+    // Create exam with questions and security settings
+    const exam = await prisma.exam.create({
+      data: {
+        title: validatedData.metadata.title,
+        description: validatedData.metadata.description,
+        duration: validatedData.metadata.duration,
+        classId: params.classId,
+        createdBy: session.user.id,
+        status: ExamStatus.DRAFT,
+        securityLevel: SecurityLevel.STANDARD,
+        blockClipboard: validatedData.securitySettings.blockClipboard,
+        blockKeyboardShortcuts: validatedData.securitySettings.blockKeyboardShortcuts,
+        blockMultipleTabs: validatedData.securitySettings.blockMultipleTabs,
+        blockRightClick: validatedData.securitySettings.blockRightClick,
+        blockSearchEngines: validatedData.securitySettings.blockSearchEngines,
+        browserMonitoring: validatedData.securitySettings.browserMonitoring,
+        deviceTracking: validatedData.securitySettings.deviceTracking,
+        fullScreenMode: validatedData.securitySettings.fullScreenMode,
+        maxViolations: validatedData.securitySettings.maxViolations,
+        periodicUserValidation: validatedData.securitySettings.periodicUserValidation,
+        resumeCount: validatedData.securitySettings.resumeCount,
+        screenshotBlocking: validatedData.securitySettings.screenshotBlocking,
+        webcamRequired: validatedData.securitySettings.webcamRequired,
+        questions: {
+          create: validatedData.questions.map((q, index) => {
+            const questionData: Prisma.QuestionCreateWithoutExamInput = {
+              content: q.content,
+              type: q.type as QuestionType,
+              points: q.points,
+              timeLimit: q.timeLimit,
+              orderIndex: index,
+              difficulty: DifficultyLevel.MEDIUM,
+            }
 
-    // Create the exam and its questions in a transaction
-    const exam = await prisma.$transaction(async (tx) => {
-      // Create the exam
-      const exam = await tx.exam.create({
-        data: {
-          title: examData.title,
-          description: examData.description,
-          duration: examData.timeLimit || 0,
-          status: examData.isPublished ? ExamStatus.PUBLISHED : ExamStatus.DRAFT,
-          classId: classId,
-          createdBy: user.id,
-          securityLevel: examData.securityLevel,
-          maxViolations: examData.maxViolations,
-          blockClipboard: examData.blockClipboard,
-          blockKeyboardShortcuts: examData.blockKeyboardShortcuts,
-          blockMultipleTabs: examData.blockMultipleTabs,
-          blockRightClick: examData.blockRightClick,
-          blockSearchEngines: examData.blockSearchEngines,
-          browserMonitoring: examData.browserMonitoring,
-          deviceTracking: examData.deviceTracking,
-          fullScreenMode: examData.fullScreenMode,
-          periodicUserValidation: examData.periodicUserValidation,
-          resumeCount: examData.resumeCount,
-          screenshotBlocking: examData.screenshotBlocking,
-          webcamRequired: examData.webcamRequired,
-          endTime: examData.dueDate ? new Date(examData.dueDate) : null,
+            if (q.options) {
+              questionData.options = q.options as Prisma.InputJsonValue
+            }
+
+            return questionData
+          }),
         },
-      })
-
-      // Create questions for the exam
-      for (const [index, questionData] of examData.questions.entries()) {
-        const baseQuestionData = {
-          examId: exam.id,
-          type: questionData.type,
-          content: questionData.content,
-          points: questionData.points,
-          difficulty: questionData.difficulty,
-          explanation: questionData.explanation,
-          timeLimit: questionData.timeLimit || 0,
-          orderIndex: index,
-        }
-
-        // Convert the question data to match the schema's JSON fields
-        let options: Prisma.InputJsonValue | undefined = undefined
-        let testCases: Prisma.InputJsonValue | undefined = undefined
-
-        if (questionData.type === 'MULTIPLE_CHOICE' && questionData.options) {
-          options = questionData.options as Prisma.InputJsonValue
-        } else if (questionData.type === 'MATCHING' && questionData.matchingPairs) {
-          options = questionData.matchingPairs as Prisma.InputJsonValue
-        } else if (questionData.type === 'CODING' && questionData.testCases) {
-          testCases = questionData.testCases as Prisma.InputJsonValue
-        }
-
-        await tx.question.create({
-          data: {
-            ...baseQuestionData,
-            options,
-            testCases,
-            correctAnswer: questionData.correctAnswer,
-            rubric: questionData.rubric,
-            codeTemplate: questionData.codeTemplate,
-          },
-        })
-      }
-
-      return exam
+      },
+      include: {
+        questions: true,
+      },
     })
 
-    // If this was created from a draft, delete the draft
-    if (body.fromDraft) {
-      await deleteExamDraft(user.id)
-    }
-
-    return Response.json({
-      success: true,
-      message: 'Exam created successfully',
-      data: exam
-    })
+    console.log('Exam created successfully:', exam)
+    return NextResponse.json(exam)
   } catch (error) {
     console.error('Failed to create exam:', error)
     if (error instanceof z.ZodError) {
-      return Response.json(
-        { error: 'Invalid request data', details: error.errors },
-        { status: 400 }
+      return new NextResponse(
+        JSON.stringify({ 
+          message: 'Invalid exam data', 
+          errors: error.errors 
+        }), 
+        { 
+          status: 400,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
       )
     }
-    return Response.json(
-      { error: 'Failed to create exam' },
-      { status: 500 }
+    return new NextResponse(
+      JSON.stringify({ 
+        message: 'Internal server error',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }),
+      { 
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
     )
   }
 }
 
 export async function GET(
-  req: Request,
+  request: Request,
   { params }: { params: { classId: string } }
 ) {
   try {
-    const session = await getServerSession(authConfig)
-    if (!session?.user?.email) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
+    const classId = await prisma.class.findUnique({
+      where: {
+        id: params.classId,
+      },
     })
-
-    if (!user || user.role !== 'TEACHER') {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!classId) {
+      return new NextResponse('Class ID is required', { status: 400 })
     }
 
-    const classId = params.classId
-    const teacherClass = await prisma.class.findFirst({
+    // Check if user is teacher of the class
+    const classTeacher = await prisma.class.findFirst({
       where: {
         id: classId,
-        teacherId: user.id,
+        teacherId: session.user.id,
       },
     })
 
-    if (!teacherClass) {
-      return Response.json(
-        { error: 'Class not found or unauthorized' },
-        { status: 404 }
-      )
+    if (!classTeacher) {
+      return new NextResponse('Unauthorized', { status: 401 })
     }
 
+    // Get all exams for the class
     const exams = await prisma.exam.findMany({
       where: {
-        classId: classId,
+        classId,
       },
       include: {
         questions: true,
@@ -256,25 +195,11 @@ export async function GET(
       },
     })
 
-    // Transform the questions to include parsed JSON fields
-    const transformedExams = exams.map(exam => ({
-      ...exam,
-      questions: exam.questions.map(question => ({
-        ...question,
-        options: question.options as Record<string, any> | null,
-        testCases: question.testCases as Record<string, any> | null,
-      })),
-    }))
-
-    return Response.json({ success: true, data: transformedExams })
+    return NextResponse.json(exams)
   } catch (error) {
     console.error('Failed to fetch exams:', error)
-    return Response.json(
-      { 
-        success: false, 
-        error: 'Failed to fetch exams',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
+    return new NextResponse(
+      JSON.stringify({ message: 'Internal server error' }),
       { status: 500 }
     )
   }
