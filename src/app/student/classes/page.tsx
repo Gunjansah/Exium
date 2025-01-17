@@ -45,9 +45,10 @@ interface EnrollmentRequest {
   createdAt: string;
 }
 
-const queryClient = useQueryClient()
+
 
 export default function ClassesPage() {
+  const queryClient = useQueryClient()
   const { toast } = useToast()
   const { data: classes, isLoading, refetch } = useQuery<ClassesData>({
     queryKey: ['classes'],
