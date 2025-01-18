@@ -1,8 +1,19 @@
 import { useEffect, useCallback, useState } from 'react'
 import { ViolationType } from '@prisma/client'
-import { SecurityViolation } from '@/types/exam'
+import { create } from 'zustand'
+import { toast } from 'sonner'
 
-interface UseExamSecurityProps {
+// Types and Interfaces
+interface SecurityViolation {
+  id: string
+  examId: string
+  userId?: string
+  type: ViolationType
+  timestamp: Date
+  details?: any
+}
+
+interface SecurityConfig {
   examId: string
   maxViolations: number
   fullScreenMode?: boolean
@@ -17,34 +28,106 @@ interface UseExamSecurityProps {
   periodicUserValidation?: boolean
 }
 
-interface SecurityState {
+export interface SecurityState {
   isFullScreen: boolean
   violationCount: number
   isLocked: boolean
   violations: SecurityViolation[]
+  activeTabId: string
+  lastActiveTime: number
+  deviceFingerprint: string | null
+  webcamActive: boolean
+  searchEngineActive: boolean
+  validationStatus: 'pending' | 'validating' | 'validated' | 'failed'
 }
 
-export function useExamSecurity({
-  examId,
-  maxViolations,
-  fullScreenMode = true,
-  blockMultipleTabs = true,
-  blockKeyboardShortcuts = true,
-  blockRightClick = true,
-  blockClipboard = true,
-  browserMonitoring = true,
-  blockSearchEngines = true,
-  deviceTracking = true,
-  screenshotBlocking = true,
-  periodicUserValidation = true,
-}: UseExamSecurityProps) {
-  const [securityState, setSecurityState] = useState<SecurityState>({
-    isFullScreen: false,
-    violationCount: 0,
-    isLocked: false,
-    violations: [],
-  })
+interface SecurityStore extends SecurityState {
+  config: SecurityConfig
+  incrementViolation: (violation: SecurityViolation) => void
+  setFullScreen: (isFullScreen: boolean) => void
+  setLocked: (isLocked: boolean) => void
+  setWebcamActive: (active: boolean) => void
+  setValidationStatus: (status: SecurityState['validationStatus']) => void
+  reset: () => void
+}
 
+// Security Store
+const useSecurityStore = create<SecurityStore>((set) => ({
+  isFullScreen: false,
+  violationCount: 0,
+  isLocked: false,
+  violations: [],
+  activeTabId: crypto.randomUUID(),
+  lastActiveTime: Date.now(),
+  deviceFingerprint: null,
+  webcamActive: false,
+  searchEngineActive: false,
+  validationStatus: 'pending',
+  config: {
+    examId: '',
+    maxViolations: 3,
+    fullScreenMode: true,
+    blockMultipleTabs: true,
+    blockKeyboardShortcuts: true,
+    blockRightClick: true,
+    blockClipboard: true,
+    browserMonitoring: true,
+    blockSearchEngines: true,
+    deviceTracking: true,
+    screenshotBlocking: true,
+    periodicUserValidation: true,
+    webcamRequired: true,
+    resumeCount: 0,
+  },
+  incrementViolation: (violation) =>
+    set((state) => {
+      const newViolations = [...state.violations, violation]
+      const newCount = state.violationCount + 1
+      const shouldLock = newCount >= state.config.maxViolations
+
+      if (shouldLock) {
+        toast.error('Maximum violations reached. Exam is now locked.')
+      } else {
+        toast.warning(`Security violation detected. ${state.config.maxViolations - newCount} warnings remaining.`)
+      }
+
+      return {
+        violations: newViolations,
+        violationCount: newCount,
+        isLocked: shouldLock,
+      }
+    }),
+  setFullScreen: (isFullScreen) => set({ isFullScreen }),
+  setLocked: (isLocked) => set({ isLocked }),
+  setWebcamActive: (active) => set({ webcamActive: active }),
+  setValidationStatus: (status) => set({ validationStatus: status }),
+  reset: () =>
+    set({
+      violationCount: 0,
+      isLocked: false,
+      violations: [],
+      validationStatus: 'pending',
+    }),
+}))
+
+// Main Hook
+export function useExamSecurity(config: Partial<SecurityConfig>) {
+  const store = useSecurityStore()
+  const workerRef = useRef<Worker | null>(null)
+  const [isInitialized, setIsInitialized] = useState(false)
+
+  // Initialize security worker
+  useEffect(() => {
+    if (typeof window === 'undefined' || isInitialized) return
+
+    workerRef.current = new Worker(new URL('../workers/security.worker.ts', import.meta.url))
+    workerRef.current.onmessage = handleWorkerMessage
+    setIsInitialized(true)
+
+    return () => workerRef.current?.terminate()
+  }, [isInitialized])
+
+  // Record violation with backend
   const recordViolation = useCallback(async (type: ViolationType, details?: any) => {
     const violation: SecurityViolation = {
       id: crypto.randomUUID(),
@@ -56,141 +139,83 @@ export function useExamSecurity({
     }
 
     try {
-      const response = await fetch(`/api/exams/${examId}/violations`, {
+      const response = await fetch(`/api/exams/${config.examId}/violations`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(violation),
       })
 
-      if (!response.ok) {
-        throw new Error('Failed to record violation')
-      }
-
-      setSecurityState((prev) => ({
-        ...prev,
-        violationCount: prev.violationCount + 1,
-        violations: [...prev.violations, violation],
-        isLocked: prev.violationCount + 1 >= maxViolations,
-      }))
+      if (!response.ok) throw new Error('Failed to record violation')
+      store.incrementViolation(violation)
     } catch (error) {
       console.error('Failed to record security violation:', error)
+      toast.error('Failed to record security violation')
     }
-  }, [examId, maxViolations])
+  }, [config.examId])
 
-  // Handle full screen mode
+  // Handle worker messages
+  const handleWorkerMessage = useCallback((event: MessageEvent) => {
+    const { type, payload } = event.data
+    switch (type) {
+      case 'VIOLATION_DETECTED':
+        recordViolation(payload.violationType, payload.details)
+        break
+      case 'SECURITY_STATUS_UPDATE':
+        // Handle security status updates
+        break
+      default:
+        console.warn('Unknown worker message type:', type)
+    }
+  }, [recordViolation])
+
+  // Initialize security features
   useEffect(() => {
-    if (!fullScreenMode) return
+    if (!isInitialized || !config.examId) return
 
-    const handleFullScreenChange = () => {
-      const isFullScreen = document.fullscreenElement !== null
-      setSecurityState((prev) => ({ ...prev, isFullScreen }))
+    const initSecurity = async () => {
+      try {
+        // Initialize device fingerprint
+        const fpPromise = import('@fingerprintjs/fingerprintjs')
+        const fp = await fpPromise
+        const result = await fp.load()
+        const fingerprint = await result.get()
+        
+        // Send initial configuration to worker
+        workerRef.current?.postMessage({
+          type: 'INIT_SECURITY',
+          payload: {
+            config: { ...store.config, ...config },
+            fingerprint: fingerprint.visitorId,
+          },
+        })
 
-      if (!isFullScreen) {
-        recordViolation(ViolationType.FULL_SCREEN_EXIT)
+        // Request full screen if required
+        if (config.fullScreenMode) {
+          document.documentElement.requestFullscreen()
+        }
+      } catch (error) {
+        console.error('Failed to initialize security:', error)
+        toast.error('Failed to initialize security features')
       }
     }
 
-    document.addEventListener('fullscreenchange', handleFullScreenChange)
-    return () => document.removeEventListener('fullscreenchange', handleFullScreenChange)
-  }, [fullScreenMode, recordViolation])
+    initSecurity()
+  }, [config, isInitialized])
 
-  // Handle keyboard shortcuts
+  // Cleanup
   useEffect(() => {
-    if (!blockKeyboardShortcuts) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Block common shortcuts
-      if (
-        (e.ctrlKey || e.metaKey) &&
-        ['c', 'v', 'x', 'a', 'p', 'r', 'f'].includes(e.key.toLowerCase())
-      ) {
-        e.preventDefault()
-        recordViolation(ViolationType.KEYBOARD_SHORTCUT, { key: e.key })
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [blockKeyboardShortcuts, recordViolation])
-
-  // Handle right click
-  useEffect(() => {
-    if (!blockRightClick) return
-
-    const handleContextMenu = (e: MouseEvent) => {
-      e.preventDefault()
-      recordViolation(ViolationType.RIGHT_CLICK)
-    }
-
-    window.addEventListener('contextmenu', handleContextMenu)
-    return () => window.removeEventListener('contextmenu', handleContextMenu)
-  }, [blockRightClick, recordViolation])
-
-  // Handle clipboard
-  useEffect(() => {
-    if (!blockClipboard) return
-
-    const handleCopy = (e: ClipboardEvent) => {
-      e.preventDefault()
-      recordViolation(ViolationType.CLIPBOARD_USAGE, { action: 'copy' })
-    }
-
-    const handlePaste = (e: ClipboardEvent) => {
-      e.preventDefault()
-      recordViolation(ViolationType.CLIPBOARD_USAGE, { action: 'paste' })
-    }
-
-    document.addEventListener('copy', handleCopy)
-    document.addEventListener('paste', handlePaste)
     return () => {
-      document.removeEventListener('copy', handleCopy)
-      document.removeEventListener('paste', handlePaste)
-    }
-  }, [blockClipboard, recordViolation])
-
-  // Handle tab visibility
-  useEffect(() => {
-    if (!blockMultipleTabs) return
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        recordViolation(ViolationType.TAB_SWITCH)
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [blockMultipleTabs, recordViolation])
-
-  // Handle periodic user validation
-  useEffect(() => {
-    if (!periodicUserValidation) return
-
-    const checkInterval = setInterval(() => {
-      // Implement user validation check here
-      // This could be a simple prompt or a more sophisticated check
-      const isValid = window.confirm('Please confirm your presence')
-      if (!isValid) {
-        recordViolation(ViolationType.PERIODIC_CHECK_FAILED)
-      }
-    }, 15 * 60 * 1000) // Check every 15 minutes
-
-    return () => clearInterval(checkInterval)
-  }, [periodicUserValidation, recordViolation])
-
-  const requestFullScreen = useCallback(async () => {
-    try {
-      await document.documentElement.requestFullscreen()
-    } catch (error) {
-      console.error('Failed to enter full screen:', error)
+      store.reset()
+      workerRef.current?.terminate()
     }
   }, [])
 
   return {
-    securityState,
-    requestFullScreen,
-    recordViolation,
+    isLocked: store.isLocked,
+    violationCount: store.violationCount,
+    isFullScreen: store.isFullScreen,
+    violations: store.violations,
+    validationStatus: store.validationStatus,
+    webcamActive: store.webcamActive,
   }
 }

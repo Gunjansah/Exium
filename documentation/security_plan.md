@@ -82,13 +82,20 @@ Outlining the comprehensive security measures implemented in our examination pla
 
 ### 8. Full Screen Mode (`fullScreenMode`)
 - Implementation:
-  - Forced full-screen mode
-  - Exit prevention
+  - Full-screen mode requirement
+  - Violation tracking for exit attempts
   - Multiple display detection
+  - Temporary exam locking on fullscreen exit
 - Monitoring:
   - Screen resolution changes
   - Display configuration changes
   - Full-screen exit attempts
+- Security Response:
+  - Immediate violation recording
+  - Temporary exam lock until fullscreen restored
+  - Clear warning system with violation count
+  - Permanent lock after maximum violations (default: 3)
+  - User-friendly dialogs for guidance
 
 ### 9. Periodic User Validation (`periodicUserValidation`)
 - Implementation:
