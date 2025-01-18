@@ -4,9 +4,10 @@ import { useEffect, useCallback, useRef, useState } from 'react'
 import { ViolationType } from '@prisma/client'
 import { create } from 'zustand'
 import { toast } from 'sonner'
+import { StateCreator, StoreApi } from 'zustand'
 
 // Types and Interfaces
-interface SecurityViolation {
+export interface SecurityViolation {
   id: string
   examId: string
   userId?: string
@@ -15,7 +16,7 @@ interface SecurityViolation {
   details?: any
 }
 
-interface SecurityConfig {
+export interface SecurityConfig {
   examId: string
   maxViolations: number
   fullScreenMode: boolean
@@ -32,7 +33,7 @@ interface SecurityConfig {
   resumeCount: number
 }
 
-interface SecurityState {
+export interface SecurityState {
   isFullScreen: boolean
   violationCount: number
   isLocked: boolean
@@ -45,73 +46,87 @@ interface SecurityState {
   validationStatus: 'pending' | 'validating' | 'validated' | 'failed'
 }
 
-interface SecurityStore extends SecurityState {
-  config: SecurityConfig
-  incrementViolation: (violation: SecurityViolation) => void
-  setFullScreen: (isFullScreen: boolean) => void
-  setLocked: (isLocked: boolean) => void
-  setWebcamActive: (active: boolean) => void
-  setValidationStatus: (status: SecurityState['validationStatus']) => void
-  reset: () => void
+export interface SecurityStore extends SecurityState {
+  config: SecurityConfig;
+  incrementViolation: (violation: SecurityViolation) => void;
+  setFullScreen: (isFullScreen: boolean) => void;
+  setLocked: (isLocked: boolean) => void;
+  setWebcamActive: (active: boolean) => void;
+  setValidationStatus: (status: SecurityState['validationStatus']) => void;
+  reset: () => void;
+  subscribe: StoreApi<SecurityState>['subscribe'];
 }
 
 // Security Store
-const useSecurityStore = create<SecurityStore>((set) => ({
+export const useSecurityStore = create<SecurityStore>((set, get, api) => ({
+  // State
   isFullScreen: false,
   violationCount: 0,
   isLocked: false,
   violations: [],
-  activeTabId: crypto.randomUUID(),
+  activeTabId: '',
   lastActiveTime: Date.now(),
   deviceFingerprint: null,
   webcamActive: false,
   searchEngineActive: false,
-  validationStatus: 'pending',
-  config: {
-    examId: '',
-    maxViolations: 3,
-    fullScreenMode: true,
-    blockMultipleTabs: true,
-    blockKeyboardShortcuts: true,
-    blockRightClick: true,
-    blockClipboard: true,
-    browserMonitoring: true,
-    blockSearchEngines: true,
-    deviceTracking: true,
-    screenshotBlocking: true,
-    periodicUserValidation: true,
-    webcamRequired: true,
-    resumeCount: 0,
-  },
-  incrementViolation: (violation) =>
-    set((state) => {
-      const newViolations = [...state.violations, violation]
-      const newCount = state.violationCount + 1
-      const shouldLock = newCount >= state.config.maxViolations
+  validationStatus: 'pending' as const,
+  config: {} as SecurityConfig,
 
-      if (shouldLock) {
+  // Actions
+  incrementViolation(violation: SecurityViolation) {
+    set(state => {
+      const newViolationCount = state.violationCount + 1
+      const newState: Partial<SecurityState> = {
+        violationCount: newViolationCount,
+        violations: [...state.violations, violation],
+        isLocked: newViolationCount >= state.config.maxViolations
+      }
+      
+      // Show appropriate toast message
+      if (newState.isLocked) {
         toast.error('Maximum violations reached. Exam is now locked.')
       } else {
-        toast.warning(`Security violation detected. ${state.config.maxViolations - newCount} warnings remaining.`)
+        const remaining = state.config.maxViolations - newViolationCount
+        toast.error(`Security Violation! ${remaining} ${remaining === 1 ? 'warning' : 'warnings'} remaining before exam lock.`)
       }
+      
+      return newState
+    })
+  },
 
-      return {
-        violations: newViolations,
-        violationCount: newCount,
-        isLocked: shouldLock,
-      }
-    }),
-  setFullScreen: (isFullScreen) => set({ isFullScreen }),
-  setLocked: (isLocked) => set({ isLocked }),
-  setWebcamActive: (active) => set({ webcamActive: active }),
-  setValidationStatus: (status) => set({ validationStatus: status }),
-  reset: () =>
+  setFullScreen(isFullScreen: boolean) {
+    set(state => ({ isFullScreen }))
+  },
+
+  setLocked(isLocked: boolean) {
+    set(state => ({ isLocked }))
+  },
+
+  setWebcamActive(active: boolean) {
+    set({ webcamActive: active })
+  },
+
+  setValidationStatus(status: SecurityState['validationStatus']) {
+    set({ validationStatus: status })
+  },
+
+  reset() {
     set({
+      isFullScreen: false,
       violationCount: 0,
       isLocked: false,
       violations: [],
+      activeTabId: '',
+      lastActiveTime: Date.now(),
+      deviceFingerprint: null,
+      webcamActive: false,
+      searchEngineActive: false,
       validationStatus: 'pending',
-    }),
+      config: {} as SecurityConfig
+    })
+  },
+
+  subscribe: api.subscribe
 }))
 
 // Main Hook
@@ -140,21 +155,8 @@ export function useExamSecurity(config: Partial<SecurityConfig>) {
       timestamp: new Date(),
       details,
     }
-
-    try {
-      const response = await fetch(`/api/exams/${config.examId}/violations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(violation),
-      })
-
-      if (!response.ok) throw new Error('Failed to record violation')
-      store.incrementViolation(violation)
-    } catch (error) {
-      console.error('Failed to record security violation:', error)
-      toast.error('Failed to record security violation')
-    }
-  }, [config.examId])
+    store.incrementViolation(violation)
+  }, [config.examId, store])
 
   // Handle worker messages
   const handleWorkerMessage = useCallback((event: MessageEvent) => {
@@ -164,61 +166,37 @@ export function useExamSecurity(config: Partial<SecurityConfig>) {
         recordViolation(payload.violationType, payload.details)
         break
       case 'SECURITY_STATUS_UPDATE':
-        // Handle security status updates
+        switch (payload.type) {
+          case 'FULLSCREEN':
+            store.setFullScreen(payload.status)
+            break
+          case 'WEBCAM':
+            store.setWebcamActive(payload.status)
+            break
+          case 'VALIDATION':
+            store.setValidationStatus(payload.status)
+            break
+        }
         break
       default:
         console.warn('Unknown worker message type:', type)
     }
-  }, [recordViolation])
+  }, [recordViolation, store])
 
-  // Initialize security features
-  useEffect(() => {
-    if (!isInitialized || !config.examId) return
-
-    const initSecurity = async () => {
-      try {
-        // Initialize device fingerprint
-        const fpPromise = import('@fingerprintjs/fingerprintjs')
-        const fp = await fpPromise
-        const result = await fp.load()
-        const fingerprint = await result.get()
-        
-        // Send initial configuration to worker
-        workerRef.current?.postMessage({
-          type: 'INIT_SECURITY',
-          payload: {
-            config: { ...store.config, ...config },
-            fingerprint: fingerprint.visitorId,
-          },
-        })
-
-        // Request full screen if required
-        if (config.fullScreenMode) {
-          document.documentElement.requestFullscreen()
-        }
-      } catch (error) {
-        console.error('Failed to initialize security:', error)
-        toast.error('Failed to initialize security features')
-      }
-    }
-
-    initSecurity()
-  }, [config, isInitialized])
-
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      store.reset()
-      workerRef.current?.terminate()
-    }
-  }, [])
-
+  // Return state and actions
   return {
     isLocked: store.isLocked,
     violationCount: store.violationCount,
     isFullScreen: store.isFullScreen,
     violations: store.violations,
-    validationStatus: store.validationStatus,
     webcamActive: store.webcamActive,
+    validationStatus: store.validationStatus,
+    // Add store actions
+    setWebcamActive: store.setWebcamActive,
+    setFullScreen: store.setFullScreen,
+    setLocked: store.setLocked,
+    setValidationStatus: store.setValidationStatus,
+    incrementViolation: store.incrementViolation,
+    reset: store.reset
   }
 }
