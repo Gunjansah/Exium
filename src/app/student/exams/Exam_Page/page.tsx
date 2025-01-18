@@ -134,7 +134,7 @@ const languageIdMap: { [key: string]: number } = {
 };
 
 // Add this line after imports
-const JUDGE0_API_URL = 'http://3.143.205.186:2358';
+const JUDGE0_API_URL = 'http://3.15.15.222:2358';
 
 export default function ExamInterface() {
   const router = useRouter()
@@ -162,6 +162,8 @@ export default function ExamInterface() {
   const [isOutputMaximized, setIsOutputMaximized] = useState(false)
   const [testCaseResults, setTestCaseResults] = useState<Array<{ passed: boolean; input: string; expected: string; output: string; time: string }>>([])
   const [processing, setProcessing] = useState(false);
+  const [questionAnswers, setQuestionAnswers] = useState<{[key: string]: string}>({});
+  const [selectedLanguage, setSelectedLanguage] = useState('javascript');
 
   // Load exam data
   useEffect(() => {
@@ -172,58 +174,31 @@ export default function ExamInterface() {
       }
 
       try {
-        // This is a placeholder - replace with actual API call
+        const response = await fetch(`/api/exams/${examId}/questions`)
+        if (!response.ok) {
+          throw new Error('Failed to fetch exam questions')
+        }
+        const { data: questions } = await response.json()
+
+        const formattedQuestions = questions.map((question: any) => ({
+          id: question.id,
+          type: question.type,
+          questionText: question.text,
+          description: question.description,
+          examples: question.examples,
+          constraints: question.constraints,
+          testCases: question.testCases,
+          choices: question.choices,
+          correctAnswer: question.correctAnswer
+        }))
+
         const data: ExamData = {
           id: examId,
-          title: 'Advanced Algorithms',
-          duration: '2 hours',
-          questions: [
-            {
-              id: '1',
-              type: 'CODING',
-              questionText: 'Longest Common Subsequence',
-              description: 'Given two strings text1 and text2, return the length of their longest common subsequence. If there is no common subsequence, return 0.',
-              examples: [
-                {
-                  input: 'text1 = "abcde", text2 = "ace"',
-                  output: '3',
-                  explanation: 'The longest common subsequence is "ace" and its length is 3.'
-                },
-                {
-                  input: 'text1 = "abc", text2 = "def"',
-                  output: '0',
-                  explanation: 'There is no common subsequence between the two strings.'
-                }
-              ],
-              constraints: [
-                '1 <= text1.length, text2.length <= 1000',
-                'text1 and text2 consist of only lowercase English characters.'
-              ],
-              testCases: [
-                { input: ['ABCDGH', 'AEDFHR'], expected: 'ADH' },
-                { input: ['AGGTAB', 'GXTXAYB'], expected: 'GTAB' }
-              ]
-            },
-            {
-              id: '2',
-              type: 'QUIZ',
-              questionText: 'Which time complexity represents the worst-case scenario for QuickSort?',
-              choices: [
-                'O(n log n)',
-                'O(n²)',
-                'O(n)',
-                'O(log n)'
-              ],
-              correctAnswer: 'O(n²)'
-            },
-            {
-              id: '3',
-              type: 'SHORT_ANSWER',
-              questionText: 'Explain the difference between process and thread in operating systems.',
-              description: 'Provide a concise explanation highlighting the key differences between processes and threads in terms of resource usage and communication.'
-            }
-          ]
+          title: 'Exam Title', // Replace with actual title if available
+          duration: '1 hours', // Replace with actual duration if available
+          questions: formattedQuestions
         }
+
         setExamData(data)
         setIsLoading(false)
       } catch (error) {
@@ -342,21 +317,35 @@ export default function ExamInterface() {
   }, [code])
 
   const handleCodeChange = (value: string | undefined) => {
-    if (!value) return
-    setCode(value)
-    checkForPlagiarism(value)
+    if (!value || !examData) return;
+    const currentQuestionId = examData.questions[currentQuestion].id;
+    setCode(value);
+    setQuestionAnswers(prev => ({
+      ...prev,
+      [currentQuestionId]: value
+    }));
+    checkForPlagiarism(value);
   }
 
-  const supportedLanguages = [
-    { id: 'javascript', name: 'JavaScript', extension: '.js' },
-    { id: 'python', name: 'Python', extension: '.py' },
-    { id: 'java', name: 'Java', extension: '.java' },
-    { id: 'cpp', name: 'C++', extension: '.cpp' },
-    { id: 'csharp', name: 'C#', extension: '.cs' },
-    { id: 'ruby', name: 'Ruby', extension: '.rb' },
-    { id: 'go', name: 'Go', extension: '.go' },
-    { id: 'rust', name: 'Rust', extension: '.rs' },
-  ]
+  // Update the code when switching questions
+  useEffect(() => {
+    if (examData?.questions[currentQuestion]) {
+      const questionId = examData.questions[currentQuestion].id;
+      const savedCode = questionAnswers[questionId] || '';
+      setCode(savedCode);
+    }
+  }, [currentQuestion, examData, questionAnswers]);
+
+  // Update answer for non-coding questions
+  const handleAnswerChange = (value: string) => {
+    setAnswer(value);
+    if (examData?.questions[currentQuestion]) {
+      setQuestionAnswers(prev => ({
+        ...prev,
+        [examData.questions[currentQuestion].id]: value
+      }));
+    }
+  }
 
   // Then update the runCode function to use the correct language ID
   const runCode = async () => {
@@ -445,8 +434,50 @@ export default function ExamInterface() {
   const handleSubmit = async () => {
     setIsSubmitting(true)
     try {
-      // Implement submission logic here
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      if (!examData || !session?.user) {
+        throw new Error('Missing exam data or user session')
+      }
+
+      // Compile all answers into a JSON object
+      const answers = examData.questions.map((question) => {
+        return {
+          questionId: question.id,
+          type: question.type,
+          answer: questionAnswers[question.id] || '',
+          executionResults: question.type === 'CODING' ? testCaseResults : undefined
+        }
+      })
+
+      // Create a JSON blob and trigger download
+      const jsonData = JSON.stringify({
+        examId: examData.id,
+        studentId: session.user.email || 'unknown',
+        submittedAt: new Date().toISOString(),
+        answers: answers,
+        securityReport: {
+          totalViolations: securityViolations.length,
+          violations: securityViolations.map((violation, index) => ({
+            id: index + 1,
+            description: violation,
+            timestamp: new Date().toISOString()
+          })),
+          mouseExitCount: mouseOutCount,
+          tabSwitchCount: securityViolations.filter(v => v.includes('Tab switching')).length,
+          fullscreenExitCount: securityViolations.filter(v => v.includes('Fullscreen')).length,
+          plagiarismWarnings: securityViolations.filter(v => v.includes('plagiarism')).length
+        }
+      }, null, 2)
+
+      const blob = new Blob([jsonData], { type: 'application/json' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `exam_${examData.id}_submission.json`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
       router.push('/student/exams')
     } catch (error) {
       console.error('Submission failed:', error)
@@ -512,8 +543,8 @@ export default function ExamInterface() {
                     type="radio"
                     name="quiz-answer"
                     value={choice}
-                    checked={answer === choice}
-                    onChange={(e) => setAnswer(e.target.value)}
+                    checked={questionAnswers[question.id] === choice}
+                    onChange={(e) => handleAnswerChange(e.target.value)}
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500"
                   />
                   <span className="text-gray-900">{choice}</span>
@@ -529,8 +560,8 @@ export default function ExamInterface() {
             <h2 className="text-xl font-bold text-gray-900">{question.questionText}</h2>
             <p className="text-gray-600">{question.description}</p>
             <textarea
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
+              value={questionAnswers[question.id] || ''}
+              onChange={(e) => handleAnswerChange(e.target.value)}
               className="w-full h-48 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Type your answer here..."
             />
@@ -890,8 +921,8 @@ export default function ExamInterface() {
     }
   }, [examId, session, router])
 
-  // If no examId or session, show loading
-  if (!examId || !session) {
+  // If no examId, session, or examData, show loading
+  if (!examId || !session || !examData) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -1005,7 +1036,11 @@ export default function ExamInterface() {
           <div className="w-[60%] h-full flex flex-col bg-[#1E1E1E]">
             {/* Editor */}
             <div className="flex-1 relative">
-              <Judge0Tester />
+              <Judge0Tester 
+                key={examData.questions[currentQuestion].id}
+                onCodeChange={handleCodeChange} 
+                initialCode={questionAnswers[examData.questions[currentQuestion].id] || 'print("Hello, World!")'} 
+              />
             </div>
 
             {/* Submit Button */}

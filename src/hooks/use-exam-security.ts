@@ -1,6 +1,4 @@
-"use client"
-
-import { useEffect, useCallback, useRef, useState } from 'react'
+import { useEffect, useCallback, useState, useRef } from 'react'
 import { ViolationType } from '@prisma/client'
 import { create } from 'zustand'
 import { toast } from 'sonner'
@@ -150,7 +148,8 @@ export function useExamSecurity(config: Partial<SecurityConfig>) {
   const recordViolation = useCallback(async (type: ViolationType, details?: any) => {
     const violation: SecurityViolation = {
       id: crypto.randomUUID(),
-      examId: config.examId!,
+      examId,
+      userId: '', // Will be set by the API
       type,
       timestamp: new Date(),
       details,

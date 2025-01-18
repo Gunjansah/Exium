@@ -1,9 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { getSession } from 'next-auth/react'
 import { AtSymbolIcon, KeyIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline'
 import Link from 'next/link'
+import { withAuth } from 'next-auth/middleware'
 
 interface FormData {
   email: string
@@ -16,6 +18,18 @@ export default function Signup() {
   const [role, setRole] = useState<'STUDENT' | 'TEACHER'>('STUDENT')
   const [errorMessage, setErrorMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    async function checkSession() {
+      const session = await getSession()
+      console.log('Checking session',session)
+      if (session) {
+        const dashboardURL = session.user.role === 'TEACHER' ? '/teacher/dashboard' : '/student/dashboard';
+        router.push(dashboardURL);
+      }
+    }
+    checkSession()
+  }, [router])
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()

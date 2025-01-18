@@ -48,8 +48,27 @@ export async function POST(
       )
     }
 
-    const body = await req.json()
-    const { requestId, action } = handleEnrollmentSchema.parse(body)
+    const body = await req.json().catch(() => null)
+    if (!body) {
+      return new NextResponse(
+        JSON.stringify({ success: false, message: 'Invalid request body' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const validatedData = handleEnrollmentSchema.safeParse(body)
+    if (!validatedData.success) {
+      return new NextResponse(
+        JSON.stringify({
+          success: false,
+          message: 'Invalid request data',
+          errors: validatedData.error.errors
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const { requestId, action } = validatedData.data
 
     // Get the enrollment request
     const enrollmentRequest = await prisma.enrollmentRequest.findFirst({

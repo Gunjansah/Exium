@@ -1,8 +1,8 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
-import { GraduationCap, Users, Calendar, FileText } from 'lucide-react'
+import { GraduationCap, Users, Calendar, FileText, Loader2 } from 'lucide-react'
 import StudentDashboardLayout from '@/components/student-dashboard/layout/StudentDashboardLayout'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,13 +32,20 @@ interface Class {
     duration: number
   }>
 }
-
+  
 interface ClassesData {
   enrolled: Class[]
   available: Class[]
 }
 
+interface EnrollmentRequest {
+  classId: string;
+  status: string;
+  createdAt: string;
+}
+
 export default function ClassesPage() {
+  const queryClient = useQueryClient()
   const { toast } = useToast()
   const { data: classes, isLoading, refetch } = useQuery<ClassesData>({
     queryKey: ['classes'],
@@ -54,9 +61,24 @@ export default function ClassesPage() {
     refetchOnWindowFocus: false,
   })
 
+  const { data: enrollmentRequests } = useQuery<EnrollmentRequest[]>({
+    queryKey: ['enrollment-requests'],
+    queryFn: async () => {
+      const response = await fetch('/api/student/classes/enrollmentRequests')
+      if (!response.ok) {
+        throw new Error('Failed to fetch enrollment requests')
+      }
+      return response.json()
+    },
+  })
+
+  const isPending = (classId: string) => {
+    return enrollmentRequests?.some(request => request.classId === classId) ?? false
+  }
+
   const handleEnroll = async (classId: string) => {
     try {
-      const response = await fetch('/api/student/classes', {
+      const response = await fetch('/api/student/classes/enroll', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -69,10 +91,14 @@ export default function ClassesPage() {
         throw new Error(error.message || 'Failed to enroll in class')
       }
 
-      await refetch()
+      await Promise.all([
+        refetch(),
+        queryClient.invalidateQueries({ queryKey: ['enrollment-requests'] })
+      ])
+      
       toast({
         title: 'Success',
-        description: 'Successfully enrolled in class',
+        description: 'Enrollment request sent successfully',
       })
     } catch (error) {
       console.error('Error enrolling in class:', error)
@@ -229,8 +255,17 @@ export default function ClassesPage() {
                       <Button
                         className="w-full"
                         onClick={() => handleEnroll(cls.id)}
+                        disabled={isPending(cls.id)}
+                        variant={isPending(cls.id) ? "outline" : "default"}
                       >
-                        Enroll Now
+                        {isPending(cls.id) ? (
+                          <span className="flex items-center">
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Enrollment Pending
+                          </span>
+                        ) : (
+                          'Enroll Now'
+                        )}
                       </Button>
                     </div>
                   </CardContent>
