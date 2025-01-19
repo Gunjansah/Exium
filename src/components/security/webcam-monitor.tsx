@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { PresenceDetector } from '@/lib/security/presence-detection'
 
 interface WebcamMonitorProps {
   examId: string
@@ -25,9 +26,10 @@ interface WebcamMonitorProps {
 
 export function WebcamMonitor({ examId, required = false, className }: WebcamMonitorProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const presenceDetectorRef = useRef<PresenceDetector | null>(null)
   const [error, setError] = useState<string>()
   const [showPermissionDialog, setShowPermissionDialog] = useState(false)
-  const { webcamActive, setWebcamActive } = useExamSecurity({ examId })
+  const { webcamActive, setWebcamActive, recordViolation } = useExamSecurity({ examId })
 
   const startWebcam = async () => {
     try {
@@ -58,6 +60,18 @@ export function WebcamMonitor({ examId, required = false, className }: WebcamMon
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         setWebcamActive(true)
+
+        // Initialize presence detection
+        presenceDetectorRef.current = new PresenceDetector(
+          recordViolation,
+          {
+            checkInterval: 5000,
+            motionThreshold: 20,
+            brightnessThreshold: 30,
+            maxConsecutiveFailures: 3
+          }
+        )
+        presenceDetectorRef.current.start(videoRef.current)
       }
 
       setError(undefined)
@@ -83,6 +97,10 @@ export function WebcamMonitor({ examId, required = false, className }: WebcamMon
         const stream = videoRef.current.srcObject as MediaStream
         stream.getTracks().forEach(track => track.stop())
       }
+      if (presenceDetectorRef.current) {
+        presenceDetectorRef.current.stop()
+      }
+      setWebcamActive(false)
     }
   }, [])
 

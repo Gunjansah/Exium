@@ -247,6 +247,7 @@ export function useExamSecurity(config: Partial<SecurityConfig>) {
     setValidationStatus: securityStore.setValidationStatus,
     incrementViolation: securityStore.incrementViolation,
     reset: securityStore.reset,
-    initializeSecurity: securityStore.initializeSecurity
+    initializeSecurity: securityStore.initializeSecurity,
+    recordViolation
   }
 }
