@@ -1,240 +1,183 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
-import { useRouter } from 'next/navigation'
+import { useTeacherExams } from '@/hooks/use-teacher-exams'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
-import TeacherDashboardLayout from '@/components/teacher-dashboard/layout/TeacherDashboardLayout'
-import { LoadingPageSkeleton } from '@/components/loading'
-import { Plus, PencilIcon, Eye } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
-import { ExamStatus } from '@prisma/client'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { MoreHorizontal, Pencil, Trash2, Eye, Search, ArrowLeft } from 'lucide-react'
+import Link from 'next/link'
 
-interface Exam {
-  id: string
-  title: string
-  description: string | null
-  duration: number
-  status: ExamStatus
-  createdAt: string
-  class: {
-    id: string
-    name: string
-  }
-  _count: {
-    questions: number
-    submissions: number
-  }
-}
-
-export default function ExamsPage() {
+export default function TeacherExamsPage() {
   const router = useRouter()
+  const { exams, isLoading, deleteExam, isDeleting } = useTeacherExams()
+  const [search, setSearch] = useState('')
 
-  const { data: exams, isLoading, error } = useQuery<Exam[]>({
-    queryKey: ['exams'],
-    queryFn: async () => {
-      try {
-        const response = await fetch('/api/teacher/exams')
-        if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.message || 'Failed to fetch exams')
-        }
-        const result = await response.json()
-        if (!result.success) {
-          throw new Error(result.message || 'Failed to fetch exams')
-        }
-        return result.data || [] // Ensure we always return an array
-      } catch (error) {
-        console.error('Error fetching exams:', error)
-        throw error
-      }
-    },
-    initialData: [], // Start with empty array instead of undefined
-    // Ensure data is always fresh
-    staleTime: 0,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
-  })
+  const filteredExams = exams.filter(
+    (exam) =>
+      exam.title.toLowerCase().includes(search.toLowerCase()) ||
+      exam.class.name.toLowerCase().includes(search.toLowerCase()) ||
+      exam.class.code.toLowerCase().includes(search.toLowerCase())
+  )
 
-  const getStatusColor = (status: ExamStatus) => {
-    switch (status) {
-      case ExamStatus.DRAFT:
-        return 'bg-yellow-100 text-yellow-800'
-      case ExamStatus.PUBLISHED:
-        return 'bg-blue-100 text-blue-800'
-      case ExamStatus.ACTIVE:
-        return 'bg-green-100 text-green-800'
-      case ExamStatus.COMPLETED:
-        return 'bg-gray-100 text-gray-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  // Show loading state with header
   if (isLoading) {
     return (
-      <TeacherDashboardLayout>
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Exams</h1>
-              <p className="text-muted-foreground">
-                Manage your exams and view their status.
-              </p>
-            </div>
-            <Button onClick={() => router.push('/teacher/exams/new')}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create Exam
+      <div className="space-y-4 p-6">
+        <div className="flex flex-col gap-4">
+          <Link href="/teacher/dashboard">
+            <Button variant="outline" size="sm" className="w-fit">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Dashboard
             </Button>
-          </div>
-          <LoadingPageSkeleton />
+          </Link>
+          <h1 className="text-2xl font-bold">Exams</h1>
         </div>
-      </TeacherDashboardLayout>
-    )
-  }
-
-  // Show error state
-  if (error) {
-    return (
-      <TeacherDashboardLayout>
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Exams</h1>
-              <p className="text-muted-foreground">
-                Manage your exams and view their status.
-              </p>
-            </div>
-            <Button onClick={() => router.push('/teacher/exams/new')}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create Exam
-            </Button>
-          </div>
-          <Card>
-            <CardContent className="py-6 text-center text-red-500">
-              Error loading exams. Please try again later.
-            </CardContent>
-          </Card>
-        </div>
-      </TeacherDashboardLayout>
-    )
-  }
-
-  const activeExams = exams.filter(exam => exam.status === ExamStatus.ACTIVE)
-
-  return (
-    <TeacherDashboardLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Exams</h1>
-            <p className="text-muted-foreground">
-              Manage your exams and view their status.
-            </p>
-          </div>
-          <Button onClick={() => router.push('/teacher/exams/new')}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create Exam
-          </Button>
-        </div>
-
-        <div className="grid gap-6">
-          {exams.length === 0 ? (
-            <Card>
-              <CardContent className="py-6 text-center text-muted-foreground">
-                No exams found. Create your first exam to get started.
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              {/* Active Exams */}
-              {activeExams.length > 0 && (
-                <div>
-                  <h2 className="text-xl font-semibold mb-4">Active Exams</h2>
-                  <div className="grid gap-4">
-                    {activeExams.map((exam) => (
-                      <ExamCard key={exam.id} exam={exam} getStatusColor={getStatusColor} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* All Exams */}
-              <div>
-                <h2 className="text-xl font-semibold mb-4">All Exams</h2>
-                <div className="grid gap-4">
-                  {exams.map((exam) => (
-                    <ExamCard key={exam.id} exam={exam} getStatusColor={getStatusColor} />
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
+        <div className="grid gap-4">
+          {[...Array(3)].map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
         </div>
       </div>
-    </TeacherDashboardLayout>
-  )
-}
+    )
+  }
 
-// Separate component for exam card to improve readability
-function ExamCard({ exam, getStatusColor }: { exam: Exam, getStatusColor: (status: ExamStatus) => string }) {
-  const router = useRouter()
-  
   return (
-    <Card key={exam.id}>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold">{exam.title}</h3>
-            <p className="text-sm text-muted-foreground">
-              Class: {exam.class.name}
-            </p>
-          </div>
-          <div className="flex items-center gap-4">
-            <Badge className={getStatusColor(exam.status)}>
-              {exam.status}
-            </Badge>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => router.push(`/teacher/exams/${exam.id}`)}
-              >
-                <Eye className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => router.push(`/teacher/exams/${exam.id}/edit`)}
-              >
-                <PencilIcon className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+    <div className="space-y-4 p-6">
+      <div className="flex flex-col gap-4">
+        <Link href="/teacher/dashboard">
+          <Button variant="outline" size="sm" className="w-fit">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Dashboard
+          </Button>
+        </Link>
+        <h1 className="text-2xl font-bold">Exams</h1>
+      </div>
+
+      <Card className="p-4">
+        <div className="relative mb-4">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search exams by title, class name, or class code..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
         </div>
-        <div className="mt-4 grid grid-cols-4 gap-4 text-sm">
-          <div>
-            <p className="text-muted-foreground">Duration</p>
-            <p className="font-medium">{exam.duration} minutes</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Questions</p>
-            <p className="font-medium">{exam._count.questions}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Submissions</p>
-            <p className="font-medium">{exam._count.submissions}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Created</p>
-            <p className="font-medium">
-              {formatDistanceToNow(new Date(exam.createdAt), { addSuffix: true })}
-            </p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Title</TableHead>
+              <TableHead>Class</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Submissions</TableHead>
+              <TableHead>Duration</TableHead>
+              <TableHead className="w-[100px]">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredExams.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8">
+                  No exams found
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredExams.map((exam) => (
+                <TableRow key={exam.id}>
+                  <TableCell className="font-medium">{exam.title}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span>{exam.class.name}</span>
+                      <span className="text-sm text-muted-foreground">
+                        Code: {exam.class.code}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        exam.status === 'PUBLISHED'
+                          ? 'default'
+                          : exam.status === 'DRAFT'
+                          ? 'secondary'
+                          : 'destructive'
+                      }
+                    >
+                      {exam.status.toLowerCase()}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{exam._count.submissions}</TableCell>
+                  <TableCell>{exam.duration} minutes</TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          className="h-8 w-8 p-0"
+                          disabled={isDeleting === exam.id}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() =>
+                            router.push(`/teacher/exams/${exam.id}/edit`)
+                          }
+                        >
+                          <Pencil className="w-4 h-4 mr-2" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            router.push(`/teacher/exams/${exam.id}/view`)
+                          }
+                        >
+                          <Eye className="w-4 h-4 mr-2" />
+                          View
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                'Are you sure you want to delete this exam?'
+                              )
+                            ) {
+                              deleteExam(exam.id)
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Card>
+    </div>
   )
 }

@@ -17,6 +17,7 @@ import {
   ExamEnrollmentStatus,
   Prisma 
 } from '@prisma/client'
+import { examFormSchema } from '@/lib/validations/exam'
 
 const questionSchema = z.discriminatedUnion('type', [
   z.object({
@@ -121,297 +122,108 @@ const examSchema = z.object({
   periodicUserValidation: z.boolean(),
 })
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
+    // Get user session
     const session = await getServerSession(authConfig)
-    if (!session?.user?.email) {
-      return new NextResponse(
-        JSON.stringify({ success: false, message: 'Unauthorized' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      )
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      include: {
-        teachingClasses: true,
+    // Get request data
+    const body = await request.json()
+
+    // Validate data
+    const validatedData = examFormSchema.parse(body)
+
+    // Create exam
+    const exam = await prisma.exam.create({
+      data: {
+        title: validatedData.title.trim(),
+        description: validatedData.description?.trim() || null,
+        duration: validatedData.duration,
+        classId: validatedData.classId,
+        createdBy: session.user.id,
+        startTime: validatedData.startTime || null,
+        endTime: validatedData.endTime || null,
+        status: 'DRAFT',
+        securityLevel: SecurityLevel.STANDARD,
+        questions: {
+          create: validatedData.questions.map((q, index) => ({
+            content: q.content,
+            type: q.type,
+            points: q.points,
+            difficulty: q.difficulty,
+            orderIndex: index,
+            timeLimit: q.timeLimit || null,
+            explanation: q.explanation || null,
+            options: q.type === 'MULTIPLE_CHOICE' && q.options
+              ? {
+                  create: q.options.map((opt) => ({
+                    text: opt.text,
+                    isCorrect: opt.isCorrect,
+                    explanation: opt.explanation || null,
+                  })),
+                }
+              : undefined,
+          })),
+        },
+        blockClipboard: validatedData.blockClipboard,
+        blockKeyboardShortcuts: validatedData.blockKeyboardShortcuts,
+        blockMultipleTabs: validatedData.blockMultipleTabs,
+        blockRightClick: validatedData.blockRightClick,
+        blockSearchEngines: validatedData.blockSearchEngines,
+        browserMonitoring: validatedData.browserMonitoring,
+        deviceTracking: validatedData.deviceTracking,
+        fullScreenMode: validatedData.fullScreenMode,
+        maxViolations: validatedData.maxViolations,
+        periodicUserValidation: validatedData.periodicUserValidation,
+        resumeCount: validatedData.resumeCount,
+        screenshotBlocking: validatedData.screenshotBlocking,
+        webcamRequired: validatedData.webcamRequired,
       },
     })
 
-    if (!user || user.role !== 'TEACHER') {
-      return new NextResponse(
-        JSON.stringify({ success: false, message: 'Unauthorized' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      )
-    }
-
-    const body = await req.json()
-    if (!body) {
-      return new NextResponse(
-        JSON.stringify({ message: 'Request body is required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      )
-    }
-
-    const validatedData = examSchema.parse(body)
-
-    // Verify class access
-    const hasAccess = user.teachingClasses.some(c => c.id === validatedData.classId)
-    if (!hasAccess) {
-      return new NextResponse(
-        JSON.stringify({ success: false, message: 'Unauthorized access to class' }),
-        { status: 403, headers: { 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // Use transaction to ensure all operations succeed or fail together
-    const result = await prisma.$transaction(async (tx) => {
-      let exam: Exam & {
-        questions: Question[];
-        class: Class;
-        _count: { enrollments: number; submissions: number; questions: number };
-      }
-
-      const examData: Prisma.ExamCreateInput = {
-        title: validatedData.title,
-        description: validatedData.description,
-        duration: validatedData.duration,
-        startTime: validatedData.startTime ? new Date(validatedData.startTime) : null,
-        endTime: validatedData.endTime ? new Date(validatedData.endTime) : null,
-        class: {
-          connect: { id: validatedData.classId },
-        },
-        teacher: {
-          connect: { id: user.id },
-        },
-        status: validatedData.id ? undefined : ExamStatus.DRAFT,
-        securityLevel: validatedData.securityLevel,
-        maxViolations: validatedData.maxViolations,
-        fullScreenMode: validatedData.fullScreenMode,
-        blockMultipleTabs: validatedData.blockMultipleTabs,
-        blockKeyboardShortcuts: validatedData.blockKeyboardShortcuts,
-        blockRightClick: validatedData.blockRightClick,
-        blockClipboard: validatedData.blockClipboard,
-        browserMonitoring: validatedData.browserMonitoring,
-        blockSearchEngines: validatedData.blockSearchEngines,
-        resumeCount: validatedData.resumeCount,
-        webcamRequired: validatedData.webcamRequired,
-        deviceTracking: validatedData.deviceTracking,
-        screenshotBlocking: validatedData.screenshotBlocking,
-        periodicUserValidation: validatedData.periodicUserValidation,
-      }
-
-      if (validatedData.id) {
-        // Update existing exam
-        await tx.question.deleteMany({
-          where: { examId: validatedData.id },
-        })
-
-        exam = await tx.exam.update({
-          where: { id: validatedData.id },
-          data: examData,
-          include: {
-            questions: true,
-            class: true,
-            _count: {
-              select: {
-                enrollments: true,
-                submissions: true,
-                questions: true,
-              },
-            },
-          },
-        })
-      } else {
-        // Create new exam
-        exam = await tx.exam.create({
-          data: examData,
-          include: {
-            questions: true,
-            class: true,
-            _count: {
-              select: {
-                enrollments: true,
-                submissions: true,
-                questions: true,
-              },
-            },
-          },
-        })
-      }
-
-      // Create questions
-      if (validatedData.questions?.length > 0) {
-        const questions = await tx.question.createMany({
-          data: validatedData.questions.map((q, index) => ({
-            examId: exam.id,
-            type: q.type,
-            content: q.content,
-            points: q.points,
-            difficulty: q.difficulty,
-            explanation: q.explanation,
-            timeLimit: q.timeLimit,
-            orderIndex: index,
-            options: q.type === QuestionType.MULTIPLE_CHOICE ? q.options : undefined,
-            correctAnswer: 'correctAnswer' in q ? q.correctAnswer : undefined,
-            codeTemplate: 'codeTemplate' in q ? q.codeTemplate : undefined,
-            testCases: 'testCases' in q ? q.testCases : undefined,
-            rubric: 'rubric' in q ? q.rubric : undefined,
-            programmingLanguage: 'programmingLanguage' in q ? q.programmingLanguage : undefined,
-          })),
-        })
-
-        // Refresh exam with created questions
-        exam = await tx.exam.findUniqueOrThrow({
-          where: { id: exam.id },
-          include: {
-            questions: {
-              orderBy: { orderIndex: 'asc' },
-            },
-            class: true,
-            _count: {
-              select: {
-                enrollments: true,
-                submissions: true,
-                questions: true,
-              },
-            },
-          },
-        })
-      }
-
-      // Handle calendar event
-      if (validatedData.startTime) {
-        const calendarEventData = {
-          title: `Exam: ${validatedData.title}`,
-          description: validatedData.description,
-          startTime: new Date(validatedData.startTime),
-          endTime: validatedData.endTime ? new Date(validatedData.endTime) : null,
-          type: EventType.EXAM,
-          status: EventStatus.UPCOMING,
-          user: { connect: { id: user.id } },
-          class: { connect: { id: validatedData.classId } },
-          exam: { connect: { id: exam.id } },
-        }
-
-        if (validatedData.id) {
-          // Update existing calendar event
-          await tx.calendarEvent.updateMany({
-            where: { examId: validatedData.id },
-            data: {
-              title: calendarEventData.title,
-              description: calendarEventData.description,
-              startTime: calendarEventData.startTime,
-              endTime: calendarEventData.endTime,
-              status: EventStatus.UPCOMING,
-            },
-          })
-        } else {
-          // Create new calendar event
-          await tx.calendarEvent.create({
-            data: calendarEventData,
-          })
-        }
-      }
-
-      // Create exam enrollments for all students in the class
-      const classStudents = await tx.classEnrollment.findMany({
-        where: {
-          classId: validatedData.classId,
-          role: Role.STUDENT,
-        },
-      })
-
-      if (!validatedData.id) { // Only create enrollments for new exams
-        await tx.examEnrollment.createMany({
-          data: classStudents.map(student => ({
-            examId: exam.id,
-            userId: student.userId,
-            status: ExamEnrollmentStatus.NOT_STARTED,
-          })),
-          skipDuplicates: true,
-        })
-      }
-
-      return exam
-    })
-
-    return NextResponse.json({ 
-      success: true,
-      data: result 
-    }, {
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return NextResponse.json(exam)
   } catch (error) {
-    console.error('Error in exam API:', error)
-    if (error instanceof z.ZodError) {
-      return new NextResponse(
-        JSON.stringify({ 
-          success: false,
-          errors: error.errors 
-        }),
-        { 
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      )
-    }
-    return new NextResponse(
-      JSON.stringify({ 
-        success: false,
-        message: 'Error processing request',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }),
-      { 
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
+    console.error('Failed to create exam:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to create exam' },
+      { status: 500 }
     )
   }
 }
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
     const session = await getServerSession(authConfig)
-    if (!session?.user?.email) {
-      return new NextResponse(
-        JSON.stringify({ success: false, message: 'Unauthorized' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      )
+    if (!session?.user) {
+      return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    })
-
-    if (!user || user.role !== 'TEACHER') {
-      return new NextResponse(
-        JSON.stringify({ success: false, message: 'Unauthorized' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      )
-    }
-
+    // Get all exams created by the teacher, including class information
     const exams = await prisma.exam.findMany({
       where: {
-        createdBy: user.id,
+        createdBy: session.user.id,
       },
       include: {
         class: {
           select: {
             id: true,
             name: true,
+            code: true,
           },
         },
         questions: {
-          orderBy: {
-            orderIndex: 'asc',
+          select: {
+            id: true,
+            type: true,
+            points: true,
           },
         },
         _count: {
           select: {
-            enrollments: true,
             submissions: true,
-            questions: true,
           },
         },
       },
@@ -420,25 +232,53 @@ export async function GET(req: Request) {
       },
     })
 
-    // If no exams found, return empty array instead of null
-    return NextResponse.json({ 
-      success: true,
-      data: exams || [] 
-    }, {
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return NextResponse.json(exams)
   } catch (error) {
-    console.error('Error in exam API:', error)
+    console.error('Failed to fetch exams:', error)
     return new NextResponse(
-      JSON.stringify({ 
-        success: false,
-        message: 'Error processing request',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }),
-      { 
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
+      JSON.stringify({ message: 'Internal server error' }),
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const session = await getServerSession(authConfig)
+    if (!session?.user) {
+      return new NextResponse('Unauthorized', { status: 401 })
+    }
+
+    const { examId } = await request.json()
+    if (!examId) {
+      return new NextResponse('Exam ID is required', { status: 400 })
+    }
+
+    // Verify the exam belongs to the teacher
+    const exam = await prisma.exam.findFirst({
+      where: {
+        id: examId,
+        createdBy: session.user.id,
+      },
+    })
+
+    if (!exam) {
+      return new NextResponse('Exam not found or unauthorized', { status: 404 })
+    }
+
+    // Delete the exam and all related data
+    await prisma.exam.delete({
+      where: {
+        id: examId,
+      },
+    })
+
+    return new NextResponse(null, { status: 204 })
+  } catch (error) {
+    console.error('Failed to delete exam:', error)
+    return new NextResponse(
+      JSON.stringify({ message: 'Internal server error' }),
+      { status: 500 }
     )
   }
 }

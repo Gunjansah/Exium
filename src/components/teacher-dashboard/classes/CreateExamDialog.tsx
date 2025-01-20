@@ -4,8 +4,9 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { useCreateExam } from '@/hooks/use-exams'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   Dialog,
   DialogContent,
@@ -88,6 +89,8 @@ export function CreateExamDialog({ classId, trigger }: CreateExamDialogProps) {
   const queryClient = useQueryClient()
   const router = useRouter()
   
+  const { mutate: createExam, isLoading } = useCreateExam(classId)
+
   const {
     metadata,
     questions,
@@ -163,64 +166,54 @@ export function CreateExamDialog({ classId, trigger }: CreateExamDialogProps) {
         }
       }
 
-      // Show loading state
-      const loadingToast = toast.loading('Creating exam...')
-
-      // Submit the form
-      const response = await fetch(`/api/teacher/classes/${classId}/exams`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      // Create exam using the mutation
+      createExam({
+        metadata: {
+          title: data.title.trim(),
+          description: data.description?.trim(),
+          duration: Number(data.duration),
+          classId: classId,
         },
-        body: JSON.stringify({
-          metadata: {
-            title: data.title.trim(),
-            description: data.description?.trim(),
-            duration: Number(data.duration),
-            classId: classId,
-          },
-          questions: data.questions.map((q, index) => ({
-            ...q,
-            content: q.content.trim(),
-            points: Number(q.points),
-            timeLimit: q.timeLimit ? Number(q.timeLimit) : undefined,
-            orderIndex: index,
-            options: q.type === 'MULTIPLE_CHOICE' ? q.options?.map(opt => ({
-              text: opt.text.trim()
-            })) : undefined
-          })),
-          securitySettings: {
-            blockClipboard: Boolean(data.blockClipboard),
-            blockKeyboardShortcuts: Boolean(data.blockKeyboardShortcuts),
-            blockMultipleTabs: Boolean(data.blockMultipleTabs),
-            blockRightClick: Boolean(data.blockRightClick),
-            blockSearchEngines: Boolean(data.blockSearchEngines),
-            browserMonitoring: Boolean(data.browserMonitoring),
-            deviceTracking: Boolean(data.deviceTracking),
-            fullScreenMode: Boolean(data.fullScreenMode),
-            maxViolations: Number(data.maxViolations),
-            periodicUserValidation: Boolean(data.periodicUserValidation),
-            resumeCount: Number(data.resumeCount),
-            screenshotBlocking: Boolean(data.screenshotBlocking),
-            webcamRequired: Boolean(data.webcamRequired),
-          }
-        }),
+        questions: data.questions.map((q, index) => ({
+          ...q,
+          content: q.content.trim(),
+          points: Number(q.points),
+          timeLimit: q.timeLimit ? Number(q.timeLimit) : undefined,
+          orderIndex: index,
+          options: q.type === 'MULTIPLE_CHOICE' ? q.options?.map(opt => ({
+            text: opt.text.trim()
+          })) : undefined
+        })),
+        securitySettings: {
+          blockClipboard: Boolean(data.blockClipboard),
+          blockKeyboardShortcuts: Boolean(data.blockKeyboardShortcuts),
+          blockMultipleTabs: Boolean(data.blockMultipleTabs),
+          blockRightClick: Boolean(data.blockRightClick),
+          blockSearchEngines: Boolean(data.blockSearchEngines),
+          browserMonitoring: Boolean(data.browserMonitoring),
+          deviceTracking: Boolean(data.deviceTracking),
+          fullScreenMode: Boolean(data.fullScreenMode),
+          maxViolations: Number(data.maxViolations),
+          periodicUserValidation: Boolean(data.periodicUserValidation),
+          resumeCount: Number(data.resumeCount),
+          screenshotBlocking: Boolean(data.screenshotBlocking),
+          webcamRequired: Boolean(data.webcamRequired),
+        }
+      }, {
+        onSuccess: () => {
+          toast.success('Exam created successfully')
+          setOpen(false)
+          clearStore()
+          form.reset()
+          router.push('/teacher/exams')
+        },
+        onError: (error) => {
+          console.error('Error creating exam:', error)
+          toast.error(error instanceof Error ? error.message : 'Failed to create exam')
+        }
       })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || 'Failed to create exam')
-      }
-
-      // Success handling
-      toast.dismiss(loadingToast)
-      toast.success('Exam created successfully')
-      setOpen(false)
-      clearStore()
-      form.reset()
-      router.push('/teacher/exams')
     } catch (error) {
-      console.error('Error creating exam:', error)
+      console.error('Error in form submission:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to create exam')
     }
   }

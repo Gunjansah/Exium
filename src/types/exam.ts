@@ -1,25 +1,29 @@
-import { QuestionType, DifficultyLevel, ExamStatus, SecurityLevel } from '@prisma/client'
+import { SecurityLevel } from '@prisma/client'
+
+export type QuestionType = 'MULTIPLE_CHOICE' | 'SHORT_ANSWER' | 'LONG_ANSWER' | 'TRUE_FALSE' | 'MATCHING' | 'CODING'
+export type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD'
+export type ExamStatus = 'DRAFT' | 'PUBLISHED' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED'
 
 // Base question interface
-export interface BaseQuestion {
+interface BaseQuestion {
   id?: string
-  type: QuestionType
   content: string
+  type: QuestionType
   points: number
   difficulty: DifficultyLevel
-  explanation?: string | null
-  timeLimit?: number | null
   orderIndex: number
+  timeLimit?: number | null
+  explanation?: string | null
 }
 
 // Multiple choice question
 export interface MultipleChoiceQuestion extends BaseQuestion {
   type: 'MULTIPLE_CHOICE'
-  options: {
+  options: Array<{
     text: string
     isCorrect: boolean
     explanation?: string | null
-  }[]
+  }>
 }
 
 // Short answer question
@@ -37,29 +41,27 @@ export interface LongAnswerQuestion extends BaseQuestion {
 // True/False question
 export interface TrueFalseQuestion extends BaseQuestion {
   type: 'TRUE_FALSE'
-  correctAnswer: 'true' | 'false'
+  correctAnswer: boolean
 }
 
 // Matching question
 export interface MatchingQuestion extends BaseQuestion {
   type: 'MATCHING'
-  matchingPairs: {
+  pairs: Array<{
     left: string
     right: string
-  }[]
+  }>
 }
 
 // Coding question
 export interface CodingQuestion extends BaseQuestion {
   type: 'CODING'
-  programmingLanguage: string
-  codeTemplate?: string | null
-  testCases: {
+  testCases: Array<{
     input: string
     expectedOutput: string
-    isHidden: boolean
-    explanation?: string | null
-  }[]
+  }>
+  initialCode?: string
+  solutionCode?: string
 }
 
 // Union type for all question types
@@ -76,24 +78,24 @@ export interface ExamFormValues {
   title: string
   description?: string
   duration: number
-  startTime: Date | null
-  endTime: Date | null
-  classId?: string
-  questions?: Question[]
-  securityLevel?: SecurityLevel
-  maxViolations?: number
-  fullScreenMode?: boolean
-  blockMultipleTabs?: boolean
-  blockKeyboardShortcuts?: boolean
-  blockRightClick?: boolean
-  blockClipboard?: boolean
-  browserMonitoring?: boolean
-  blockSearchEngines?: boolean
-  resumeCount?: number
-  webcamRequired?: boolean
-  deviceTracking?: boolean
-  screenshotBlocking?: boolean
-  periodicUserValidation?: boolean
+  startTime?: Date | null
+  endTime?: Date | null
+  classId: string
+  questions: Question[]
+  securityLevel: SecurityLevel
+  maxViolations: number
+  fullScreenMode: boolean
+  blockMultipleTabs: boolean
+  blockKeyboardShortcuts: boolean
+  blockRightClick: boolean
+  blockClipboard: boolean
+  browserMonitoring: boolean
+  blockSearchEngines: boolean
+  resumeCount: number
+  webcamRequired: boolean
+  deviceTracking: boolean
+  screenshotBlocking: boolean
+  periodicUserValidation: boolean
 }
 
 // API response interfaces
@@ -178,24 +180,20 @@ export type QuestionFormValues = {
     }
   | {
       type: 'TRUE_FALSE'
-      correctAnswer: 'true' | 'false'
+      correctAnswer: boolean
     }
   | {
       type: 'MATCHING'
-      matchingPairs: {
+      pairs: {
         left: string
         right: string
       }[]
     }
   | {
       type: 'CODING'
-      programmingLanguage: string
-      codeTemplate?: string
       testCases: {
         input: string
         expectedOutput: string
-        isHidden: boolean
-        explanation?: string
       }[]
     }
 )
