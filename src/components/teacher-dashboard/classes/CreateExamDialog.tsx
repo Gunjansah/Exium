@@ -336,7 +336,7 @@ export function CreateExamDialog({ classId, trigger }: CreateExamDialogProps) {
       }
     })
     return () => subscription.unsubscribe()
-  }, [form.watch, open, debouncedSave])
+  }, [form.watch, open])
 
   // Clean up draft when dialog is closed
   useEffect(() => {

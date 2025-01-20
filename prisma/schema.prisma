@@ -86,7 +86,7 @@ model Exam {
   duration               Int
   endTime                DateTime?
   startTime              DateTime?
-  status                 ExamStatus          @default(DRAFT)
+  status                 ExamStatus          @default(ACTIVE)
   blockClipboard         Boolean             @default(true)
   blockKeyboardShortcuts Boolean             @default(true)
   blockMultipleTabs      Boolean             @default(true)
