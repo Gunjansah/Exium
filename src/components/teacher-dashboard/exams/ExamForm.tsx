@@ -202,7 +202,6 @@ export function ExamForm({ onSubmit, initialData }: ExamFormProps) {
         if (!data.success) {
           throw new Error(data.message || 'Failed to fetch classes')
         }
-        console.log('fetched classes', data)
         return data.data || [] // Ensure we always return an array
       } catch (error) {
         console.error('Error fetching classes:', error)

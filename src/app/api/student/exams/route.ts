@@ -69,11 +69,12 @@ export async function GET() {
       },
     })
 
+
     // Categorize exams
     const now = new Date()
-    const upcoming: any[] = []
-    const active: any[] = []
-    const completed: any[] = []
+    const upcoming_exams: any[] = []
+    const active_exams: any[] = []
+    const completed_exams: any[] = []
 
     exams.forEach(exam => {
       const enrollment = exam.enrollments[0]
@@ -96,29 +97,33 @@ export async function GET() {
       }
 
       // If student is already enrolled
-      if (enrollment) {
-        if (enrollment.status === 'IN_PROGRESS') {
-          active.push(examData)
-        } else if (enrollment.status === 'COMPLETED' || enrollment.status === 'SUBMITTED') {
-          completed.push(examData)
-        } else if (enrollment.status === 'NOT_STARTED' && exam.startTime && exam.startTime > now) {
-          upcoming.push(examData)
-        }
-      } 
+      // if (enrollment) {
+      //   if (enrollment.status === 'IN_PROGRESS') {
+      //     active_exams.push(examData)
+      //   } else if (enrollment.status === 'COMPLETED' || enrollment.status === 'SUBMITTED') {
+      //     completed_exams.push(examData)
+      //   } else if (enrollment.status === 'NOT_STARTED' && exam.startTime && exam.startTime > now) {
+      //     upcoming_exams.push(examData)
+      //   }
+      // } 
+
       // If not enrolled but exam is published/active
-      else if (exam.status === 'PUBLISHED' || exam.status === 'ACTIVE') {
+     if (exam.status === 'PUBLISHED' || exam.status === 'ACTIVE') {
         if (exam.startTime && exam.startTime > now) {
-          upcoming.push(examData)
+          upcoming_exams.push(examData)
         } else if ((!exam.startTime || exam.startTime <= now) && (!exam.endTime || exam.endTime > now)) {
-          active.push(examData)
+          active_exams.push(examData)
+        }
+        else {
+          completed_exams.push(examData)
         }
       }
     })
 
     return NextResponse.json({
-      upcoming,
-      active,
-      completed,
+      upcoming: upcoming_exams,
+      active: active_exams,
+      completed: completed_exams,
     }, {
       headers: {
         'Cache-Control': 'private, max-age=30',
