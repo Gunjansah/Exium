@@ -112,11 +112,10 @@ const useSecurityStore = create<SecurityStore>((set) => ({
 
 // Main Hook
 export function useExamSecurity(config: Partial<SecurityConfig>) {
-  const store = useSecurityStore()
+  const securityStore = useSecurityStore()
   const workerRef = useRef<Worker | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
 
-  // Initialize security worker
   useEffect(() => {
     if (typeof window === 'undefined' || isInitialized) return
 
@@ -127,15 +126,48 @@ export function useExamSecurity(config: Partial<SecurityConfig>) {
     return () => workerRef.current?.terminate()
   }, [isInitialized])
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      securityStore.behaviorAnalyzer?.recordKeystroke(e)
+    }
+
+    const handleMouseMove = (e: Event) => {
+      if (e instanceof MouseEvent) {
+        securityStore.behaviorAnalyzer?.recordMouseMovement(e)
+      }
+    }
+
+    const handleScroll = (e: Event) => {
+      // idk but needs a synthetic mouse event with the current cursor position for scroll
+      const mouseEvent = new MouseEvent('scroll', {
+        clientX: window.scrollX,
+        clientY: window.scrollY,
+      })
+      securityStore.behaviorAnalyzer?.recordMouseMovement(mouseEvent)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('click', handleMouseMove)
+    window.addEventListener('scroll', handleScroll)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('click', handleMouseMove)
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, [securityStore])
+
   // Record violation with backend
   const recordViolation = useCallback(async (type: ViolationType, details?: any) => {
     const violation: SecurityViolation = {
       id: crypto.randomUUID(),
-      examId,
+      examId: config.examId || '',
       userId: '', // Will be set by the API
       type,
       timestamp: new Date(),
-      details,
+      details: JSON.stringify(details)
     }
 
     try {
