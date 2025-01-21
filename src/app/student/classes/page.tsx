@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { GraduationCap, Users, Calendar, FileText, Loader2 } from 'lucide-react'
 import StudentDashboardLayout from '@/components/student-dashboard/layout/StudentDashboardLayout'
@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/components/ui/use-toast'
-import { useQueryClient } from '@tanstack/react-query'
 
 interface Class {
   id: string
@@ -45,8 +44,11 @@ interface EnrollmentRequest {
   createdAt: string;
 }
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 908535ccb55b2551ac99f4472f5fa7d33a1839bf
 export default function ClassesPage() {
   const queryClient = useQueryClient()
   const { toast } = useToast()
