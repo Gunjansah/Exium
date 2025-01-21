@@ -44,6 +44,11 @@ interface EnrollmentRequest {
   createdAt: string;
 }
 
+<<<<<<< HEAD
+
+
+=======
+>>>>>>> 908535ccb55b2551ac99f4472f5fa7d33a1839bf
 export default function ClassesPage() {
   const queryClient = useQueryClient()
   const { toast } = useToast()

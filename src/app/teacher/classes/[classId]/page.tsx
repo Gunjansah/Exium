@@ -20,7 +20,6 @@ import {
   Loader2
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { ExamsList } from '@/components/teacher-dashboard/classes/ExamsList'
 
 interface ClassDetails {
   id: string
@@ -133,7 +132,6 @@ export default function ClassDetailsPage() {
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="students">Students</TabsTrigger>
             <TabsTrigger value="assignments">Assignments</TabsTrigger>
-            <TabsTrigger value="exams">Exams</TabsTrigger>
             <TabsTrigger value="grades">Grades</TabsTrigger>
             <TabsTrigger value="requests">Enrollment Requests</TabsTrigger>
           </TabsList>
@@ -178,10 +176,6 @@ export default function ClassDetailsPage() {
                 <p className="text-sm text-muted-foreground">Assignment list will be displayed here</p>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="exams" className="space-y-4">
-            <ExamsList classId={classId} />
           </TabsContent>
 
           <TabsContent value="grades" className="space-y-4">

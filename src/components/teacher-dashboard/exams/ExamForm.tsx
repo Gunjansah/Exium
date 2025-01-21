@@ -207,8 +207,7 @@ export function ExamForm({ onSubmit, initialData }: ExamFormProps) {
         console.error('Error fetching classes:', error)
         throw error
       }
-    },
-    initialData: [], // Start with empty array
+    }
   })
 
   const addQuestion = () => {
