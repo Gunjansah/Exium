@@ -77,6 +77,10 @@ export function EnrollmentRequests({ classId }: EnrollmentRequestsProps) {
         description: "Enrollment request approved successfully",
       })
 
+      await queryClient.invalidateQueries({ 
+        queryKey: ['enrollment-requests', classId] 
+      })
+
     } catch (error) {
       console.error('Error approving request:', error)
       toast({

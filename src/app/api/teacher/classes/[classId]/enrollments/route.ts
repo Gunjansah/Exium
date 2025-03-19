@@ -59,10 +59,10 @@ export async function POST(
     const validatedData = handleEnrollmentSchema.safeParse(body)
     if (!validatedData.success) {
       return new NextResponse(
-        JSON.stringify({
-          success: false,
+        JSON.stringify({ 
+          success: false, 
           message: 'Invalid request data',
-          errors: validatedData.error.errors
+          errors: validatedData.error.errors 
         }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       )

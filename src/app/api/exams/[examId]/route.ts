@@ -20,10 +20,13 @@ export async function GET(
       )
     }
 
+    // Await the params before using its properties
+    const { examId } = await params;
+
     // Check if the student is enrolled in the exam
     const enrollment = await prisma.examEnrollment.findFirst({
       where: {
-        examId: params.examId,
+        examId: examId,
         userId: session.user.id,
       },
       include: {

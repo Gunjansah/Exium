@@ -39,7 +39,7 @@ export async function GET(
   { params }: { params: { examId: string } }
 ) {
   try {
-    const { examId } = params
+    const { examId } = await params
     const session = await getServerSession(authConfig)
 
     if (!session?.user?.email) {

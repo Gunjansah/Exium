@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { X } from 'lucide-react'
+import type { editor, Position } from 'monaco-editor'
+import type { Monaco } from '@monaco-editor/react'
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false })
 
@@ -16,6 +18,9 @@ interface SubmissionResult {
   compile_output?: string
   time?: string
   memory?: number
+  input?: string
+  output?: string
+  error?: string
 }
 
 interface Language {
@@ -44,9 +49,28 @@ const languages: Language[] = [
 interface Judge0TesterProps {
   onCodeChange?: (code: string) => void;
   initialCode?: string;
+  onResult?: (result: SubmissionResult) => void;
 }
 
-export default function Judge0Tester({ onCodeChange, initialCode = 'print("Hello, World!")' }: Judge0TesterProps) {
+const javaScriptSnippets = {
+  'Console Log': {
+    prefix: 'log',
+    body: 'console.log($1);',
+    description: 'Log output to console'
+  },
+  'For Loop': {
+    prefix: 'for',
+    body: 'for (let ${1:i} = 0; ${1:i} < ${2:array}.length; ${1:i}++) {\n\t$0\n}',
+    description: 'For Loop'
+  },
+  'Function': {
+    prefix: 'fn',
+    body: 'function ${1:name}(${2:params}) {\n\t$0\n}',
+    description: 'Function'
+  },
+}
+
+export default function Judge0Tester({ onCodeChange, initialCode = 'print("Hello, World!")', onResult }: Judge0TesterProps) {
   const [processing, setProcessing] = useState<boolean>(false)
   const [result, setResult] = useState<SubmissionResult | null>(null)
   const [code, setCode] = useState<string>(initialCode)
@@ -61,37 +85,38 @@ export default function Judge0Tester({ onCodeChange, initialCode = 'print("Hello
 
   const checkStatus = async (token: string): Promise<void> => {
     try {
-      const response = await fetch(`http://3.135.196.174:2358/submissions/${token}`)
-      const result: SubmissionResult = await response.json()
-      const statusId = result.status?.id
+      const response = await fetch(`/api/judge0?token=${token}`)
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to check status')
+      }
 
-      console.log('\nExecution Details:')
-      console.log('Status:', result.status?.description)
-      console.log('Time:', result.time, 'seconds')
-      console.log('Memory:', result.memory, 'KB')
-
-      if (statusId === 1 || statusId === 2) {
-        setTimeout(() => {
-          checkStatus(token)
-        }, 2000)
+      if (data.status?.id === 1 || data.status?.id === 2) {
+        // Still processing
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        await checkStatus(token)
         return
       }
 
-      setResult(result)
-      setProcessing(false)
-
-      if (result.stdout) {
-        console.log('Output:', result.stdout)
-      }
-      if (result.stderr) {
-        console.log('Error:', result.stderr)
-      }
-      if (result.compile_output) {
-        console.log('Compilation output:', result.compile_output)
-      }
+      setResult(data)
+      onResult?.({
+        status: data.status,
+        stdout: data.stdout || '',
+        stderr: data.stderr || '',
+        compile_output: data.compile_output || '',
+        time: data.time || '0',
+        memory: data.memory || 0,
+        input: data.stdin || ''
+      })
     } catch (error) {
       console.error('Error checking status:', error)
-      setProcessing(false)
+      setResult({
+        status: {
+          id: -1,
+          description: error instanceof Error ? error.message : 'Error checking status'
+        }
+      })
     }
   }
 
@@ -101,11 +126,7 @@ export default function Judge0Tester({ onCodeChange, initialCode = 'print("Hello
     setShowOutput(true)
 
     try {
-      console.log('Submitting code...')
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-      const submitResponse = await fetch('http://3.135.196.174:2358/submissions', {
+      const submitResponse = await fetch('/api/judge0', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -114,34 +135,45 @@ export default function Judge0Tester({ onCodeChange, initialCode = 'print("Hello
           source_code: code,
           language_id: language.id,
           stdin: '',
-          cpu_time_limit: 5,
-          cpu_extra_time: 1,
-          wall_time_limit: 10,
-          memory_limit: 128000,
-          stack_limit: 64000,
-          max_processes_and_or_threads: 60,
-          enable_per_process_and_thread_time_limit: true,
         }),
-        signal: controller.signal
       });
 
-      clearTimeout(timeoutId);
-
       if (!submitResponse.ok) {
-        throw new Error('Failed to submit code');
+        const errorData = await submitResponse.json();
+        throw new Error(errorData.error || 'Failed to submit code');
       }
 
       const data = await submitResponse.json();
-      await checkStatus(data.token);
+      
+      if (data.token) {
+        await checkStatus(data.token);
+      } else {
+        throw new Error('No token received from submission');
+      }
     } catch (error) {
       console.error('Error submitting code:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      
       setResult({
         status: {
           id: -1,
-          description: '❌ Error: Unable to communicate with the server. Please try again later.'
-        },
-        stderr: 'Failed to fetch results from the server. Please check your network connection or try again later.'
+          description: `❌ Error: ${errorMessage}`
+        }
       });
+      
+      onResult?.({
+        status: { 
+          id: -1, 
+          description: errorMessage 
+        },
+        stdout: '',
+        stderr: errorMessage,
+        compile_output: '',
+        time: '0',
+        memory: 0
+      });
+    } finally {
+      setProcessing(false);
     }
   }
 
@@ -150,6 +182,66 @@ export default function Judge0Tester({ onCodeChange, initialCode = 'print("Hello
     setCode(newCode);
     onCodeChange?.(newCode);
   };
+
+  const handleEditorWillMount = (monaco: Monaco) => {
+    // Register JavaScript/TypeScript completions
+    monaco.languages.registerCompletionItemProvider('javascript', {
+      provideCompletionItems: (model: editor.ITextModel, position: Position) => {
+        const word = model.getWordUntilPosition(position)
+        const range = {
+          startLineNumber: position.lineNumber,
+          endLineNumber: position.lineNumber,
+          startColumn: word.startColumn,
+          endColumn: word.endColumn
+        }
+
+        // Built-in function suggestions
+        const suggestions = [
+          {
+            label: 'console.log',
+            kind: monaco.languages.CompletionItemKind.Function,
+            insertText: 'console.log($1)',
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            documentation: 'Log to console',
+            range
+          },
+          {
+            label: 'forEach',
+            kind: monaco.languages.CompletionItemKind.Method,
+            insertText: 'forEach((${1:item}) => {\n\t$0\n})',
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            documentation: 'Array forEach loop',
+            range
+          },
+          // Add more suggestions here
+        ]
+
+        // Add snippets as suggestions
+        Object.entries(javaScriptSnippets).forEach(([name, snippet]) => {
+          suggestions.push({
+            label: snippet.prefix,
+            kind: monaco.languages.CompletionItemKind.Snippet,
+            insertText: snippet.body,
+            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            documentation: snippet.description,
+            range
+          })
+        })
+
+        return { suggestions }
+      }
+    })
+  }
+
+  const handleEditorDidMount = (editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
+    // Add actions like format code
+    editor.addAction({
+      id: 'format-code',
+      label: 'Format Code',
+      keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyF],
+      run: (ed) => ed.getAction('editor.action.formatDocument')?.run()
+    })
+  }
 
   return (
     <div className="space-y-4 h-full flex flex-col">
@@ -188,7 +280,28 @@ export default function Judge0Tester({ onCodeChange, initialCode = 'print("Hello
             options={{
               minimap: { enabled: false },
               fontSize: 14,
+              formatOnPaste: true,
+              formatOnType: true,
+              suggestOnTriggerCharacters: true,
+              snippetSuggestions: 'inline',
+              suggest: {
+                showKeywords: true,
+                showSnippets: true,
+                showClasses: true,
+                showFunctions: true,
+                showVariables: true,
+              },
+              quickSuggestions: {
+                other: true,
+                comments: true,
+                strings: true
+              },
+              parameterHints: {
+                enabled: true
+              }
             }}
+            beforeMount={handleEditorWillMount}
+            onMount={handleEditorDidMount}
           />
         </div>
 

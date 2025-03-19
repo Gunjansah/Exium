@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { AtSymbolIcon, KeyIcon } from '@heroicons/react/24/outline'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useSession, signIn } from 'next-auth/react'
+import { useSession, signIn, getSession } from 'next-auth/react'
 
 export default function SignInPage() {
   const [email, setEmail] = useState('')
@@ -39,8 +39,9 @@ export default function SignInPage() {
         return
       }
 
-      // Redirect based on user role
-      if (session?.user?.role === 'TEACHER') {
+      // Wait for session update before checking role
+      const updatedSession = await getSession()
+      if (updatedSession?.user?.role === 'TEACHER') {
         router.push('/teacher/dashboard')
       } else {
         router.push('/student/dashboard')

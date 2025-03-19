@@ -194,6 +194,18 @@ export function useExamSecurity(config: Partial<SecurityConfig>) {
     }
   }, [securityStore])
 
+  useEffect(() => {
+    const cleanup = () => {
+      // Add cleanup for security monitoring
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      document.removeEventListener('mouseleave', handleMouseLeave)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+
+    return cleanup
+  }, [])
+
   // Record violation with backend
   const recordViolation = useCallback(async (type: ViolationType, details?: any) => {
     const violation: SecurityViolation = {
